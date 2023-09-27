@@ -37,7 +37,7 @@ class radio_uhd_rx_stream : public uhd_exception_handler, public baseband_gatewa
 {
 private:
   /// Receive timeout in seconds.
-  static constexpr double RECEIVE_TIMEOUT_S = ;
+  static constexpr double RECEIVE_TIMEOUT_S = 0;
   /// Set to true for receiving data in a single packet.
   static constexpr bool ONE_PACKET = false;
 
