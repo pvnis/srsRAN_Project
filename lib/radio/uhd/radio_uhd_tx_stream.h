@@ -41,7 +41,7 @@ private:
   /// Receive asynchronous message timeout in seconds.
   static constexpr double RECV_ASYNC_MSG_TIMEOUT_S = 0.001;
   /// Transmit timeout in seconds.
-  static constexpr double TRANSMIT_TIMEOUT_S = 0.001;
+  static constexpr double TRANSMIT_TIMEOUT_S = 0;
 
   /// Indicates the stream identification for notifications.
   unsigned stream_id;
