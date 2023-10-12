@@ -28,6 +28,16 @@
 #include "srsran/srsvec/copy.h"
 #include "srsran/srsvec/zero.h"
 
+#include "srsran/phy/support/custom_time_meas.h"
+accumulator_t decoder_time_acc_25(boost::accumulators::quantile_probability = 0.25);
+accumulator_t decoder_time_acc_50(boost::accumulators::quantile_probability = 0.50);
+accumulator_t decoder_time_acc_75(boost::accumulators::quantile_probability = 0.75);
+accumulator_t decoder_time_acc_99(boost::accumulators::quantile_probability = 0.99);
+accumulator_t dematcher_time_acc_25(boost::accumulators::quantile_probability = 0.25);
+accumulator_t dematcher_time_acc_50(boost::accumulators::quantile_probability = 0.50);
+accumulator_t dematcher_time_acc_75(boost::accumulators::quantile_probability = 0.75);
+accumulator_t dematcher_time_acc_99(boost::accumulators::quantile_probability = 0.99);
+
 using namespace srsran;
 
 // Number of bits in one byte.
@@ -106,7 +116,17 @@ static optional<unsigned> decode_cblk(bit_buffer&                         output
   // As for the other alg_details, we use the default values.
 
   if (cfg.use_early_stop) {
-    return dec->decode(output, input, crc, {cb_meta, alg_details});
+    // start timer
+    std::chrono::steady_clock::time_point start_time = std::chrono::steady_clock::now();
+    optional<unsigned> no_iter = dec->decode(output, input, crc, {cb_meta, alg_details});
+    // stop timer
+    std::chrono::steady_clock::time_point stop_time = std::chrono::steady_clock::now();
+    // push time measurement
+    decoder_time_acc_25(std::chrono::duration_cast<std::chrono::nanoseconds>(stop_time - start_time).count());
+    decoder_time_acc_50(std::chrono::duration_cast<std::chrono::nanoseconds>(stop_time - start_time).count());
+    decoder_time_acc_75(std::chrono::duration_cast<std::chrono::nanoseconds>(stop_time - start_time).count());
+    decoder_time_acc_99(std::chrono::duration_cast<std::chrono::nanoseconds>(stop_time - start_time).count());
+    return no_iter;
   }
 
   // Without early stop, first decode and then check the CRC.
@@ -236,7 +256,17 @@ void pusch_decoder_impl::on_end_softbits()
     // Dematch the new LLRs and combine them with the ones from previous transmissions. We do this everytime, including
     // when the CRC for the codeblock is OK (from previous retransmissions), because we may need to decode it again if,
     // eventually, we find out that the CRC of the entire transport block is KO.
+
+    // start timer
+    std::chrono::steady_clock::time_point start_time = std::chrono::steady_clock::now();
     dematcher->rate_dematch(codeblock, cb_llrs, current_config.new_data, cb_meta);
+    // stop timer
+    std::chrono::steady_clock::time_point stop_time = std::chrono::steady_clock::now();
+    // push time measurement
+    dematcher_time_acc_25(std::chrono::duration_cast<std::chrono::nanoseconds>(stop_time - start_time).count());
+    dematcher_time_acc_50(std::chrono::duration_cast<std::chrono::nanoseconds>(stop_time - start_time).count());
+    dematcher_time_acc_75(std::chrono::duration_cast<std::chrono::nanoseconds>(stop_time - start_time).count());
+    dematcher_time_acc_99(std::chrono::duration_cast<std::chrono::nanoseconds>(stop_time - start_time).count());
 
     if (!cb_crcs[cb_id]) {
       // Try to decode.

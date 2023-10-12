@@ -31,6 +31,8 @@
 #include <signal.h>
 #include <unistd.h>
 
+#include "srsran/phy/support/custom_time_meas.h"
+
 using namespace srsran;
 
 gnb_console_helper::gnb_console_helper(io_broker& io_broker_) :
@@ -142,5 +144,16 @@ void gnb_console_helper::on_app_running()
 
 void gnb_console_helper::on_app_stopping()
 {
+
+  fmt::print("Decoder latency statstics: 25th quantile {} ns, 50th quantile {} ns, 75th quantile {} ns, 99th quantile {} ns\n", 
+              boost::accumulators::p_square_quantile(decoder_time_acc_25),
+              boost::accumulators::p_square_quantile(decoder_time_acc_50), 
+              boost::accumulators::p_square_quantile(decoder_time_acc_75),
+              boost::accumulators::p_square_quantile(decoder_time_acc_99));
+  fmt::print("Dematcher latency statstics: 25th quantile {} ns, 50th quantile {} ns, 75th quantile {} ns, 99th quantile {} ns\n", 
+              boost::accumulators::p_square_quantile(dematcher_time_acc_25),
+              boost::accumulators::p_square_quantile(dematcher_time_acc_50),
+              boost::accumulators::p_square_quantile(dematcher_time_acc_75),
+              boost::accumulators::p_square_quantile(dematcher_time_acc_99));
   fmt::print("Stopping ..\n");
 }
