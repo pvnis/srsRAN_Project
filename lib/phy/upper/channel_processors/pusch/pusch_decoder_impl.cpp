@@ -116,17 +116,7 @@ static optional<unsigned> decode_cblk(bit_buffer&                         output
   // As for the other alg_details, we use the default values.
 
   if (cfg.use_early_stop) {
-    // start timer
-    std::chrono::steady_clock::time_point start_time = std::chrono::steady_clock::now();
-    optional<unsigned> no_iter = dec->decode(output, input, crc, {cb_meta, alg_details});
-    // stop timer
-    std::chrono::steady_clock::time_point stop_time = std::chrono::steady_clock::now();
-    // push time measurement
-    decoder_time_acc_25(std::chrono::duration_cast<std::chrono::nanoseconds>(stop_time - start_time).count());
-    decoder_time_acc_50(std::chrono::duration_cast<std::chrono::nanoseconds>(stop_time - start_time).count());
-    decoder_time_acc_75(std::chrono::duration_cast<std::chrono::nanoseconds>(stop_time - start_time).count());
-    decoder_time_acc_99(std::chrono::duration_cast<std::chrono::nanoseconds>(stop_time - start_time).count());
-    return no_iter;
+    return dec->decode(output, input, crc, {cb_meta, alg_details});
   }
 
   // Without early stop, first decode and then check the CRC.
@@ -269,8 +259,17 @@ void pusch_decoder_impl::on_end_softbits()
     dematcher_time_acc_99(std::chrono::duration_cast<std::chrono::nanoseconds>(stop_time - start_time).count());
 
     if (!cb_crcs[cb_id]) {
+      // start timer
+      start_time = std::chrono::steady_clock::now();
       // Try to decode.
       optional<unsigned> nof_iters = decode_cblk(message, codeblock, decoder.get(), block_crc, cb_meta, current_config);
+      // stop timer
+      stop_time = std::chrono::steady_clock::now();
+      // push time measurement
+      decoder_time_acc_25(std::chrono::duration_cast<std::chrono::nanoseconds>(stop_time - start_time).count());
+      decoder_time_acc_50(std::chrono::duration_cast<std::chrono::nanoseconds>(stop_time - start_time).count());
+      decoder_time_acc_75(std::chrono::duration_cast<std::chrono::nanoseconds>(stop_time - start_time).count());
+      decoder_time_acc_99(std::chrono::duration_cast<std::chrono::nanoseconds>(stop_time - start_time).count());
 
       if (nof_iters.has_value()) {
         // If successful decoding, flag the CRC, record number of iterations and copy bits to the TB buffer.
