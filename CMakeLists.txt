@@ -61,6 +61,7 @@ option(ENABLE_ASAN           "Enable clang address sanitizer"           OFF)
 option(ENABLE_GCOV           "Enable code coverage"                     OFF)
 option(ENABLE_UHD            "Enable UHD"                               ON)
 option(ENABLE_ZEROMQ         "Enable ZeroMQ"                            OFF)
+option(ENABLE_BLADERF	     "Enable BladeRF"                           ON)
 option(ENABLE_FFTW           "Enable FFTW"                              ON)
 option(ENABLE_DPDK           "Enable DPDK"                              OFF)
 option(ENABLE_EXPORT         "Enable PIC and export libraries"          OFF)
@@ -217,6 +218,17 @@ endif (BUILD_TESTS)
 
 # Threads
 find_package(Threads REQUIRED)
+
+# BladeRF
+if (ENABLE_BLADERF)
+    find_package(bladeRF)
+    if (BLADERF_FOUND)
+        include_directories(${BLADERF_INCLUDE_DIRS})
+        link_directories(${BLADERF_LIBRARY_DIRS})
+    endif (BLADERF_FOUND)
+else (ENABLE_BLADERF)
+    unset(BLADERF_FOUND CACHE)
+endif (ENABLE_BLADERF)
 
 # UHD
 if (ENABLE_UHD)
