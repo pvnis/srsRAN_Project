@@ -40,13 +40,25 @@ du_ue_index_t round_robin_apply(const ue_repository& ue_db, du_ue_index_t next_u
   }
   auto it          = ue_db.lower_bound(next_ue_index);
   bool first_alloc = true;
+
+  uint8_t cqi_sum = 0;
   for (unsigned count = 0; count < ue_db.size(); ++count, ++it) {
     if (it == ue_db.end()) {
       // wrap-around
       it = ue_db.begin();
     }
     const ue&           u            = **it;
-    const alloc_outcome alloc_result = alloc_ue(u);
+    const ue_cell& ue_cc = u.get_cell(to_ue_cell_index(0));
+    cqi_sum += ue_cc.channel_state_manager().get_wideband_cqi().to_uint();
+  }
+
+  for (unsigned count = 0; count < ue_db.size(); ++count, ++it) {
+    if (it == ue_db.end()) {
+      // wrap-around
+      it = ue_db.begin();
+    }
+    const ue&           u            = **it;
+    const alloc_outcome alloc_result = alloc_ue(u, cqi_sum);
     if (alloc_result == alloc_outcome::skip_slot) {
       // Grid allocator directed policy to stop allocations for this slot.
       break;
@@ -66,6 +78,7 @@ du_ue_index_t round_robin_apply(const ue_repository& ue_db, du_ue_index_t next_u
 
 /// Allocate UE PDSCH grant.
 static alloc_outcome alloc_dl_ue(const ue&                    u,
+                                 uint8_t                      cqi_sum,
                                  const ue_resource_grid_view& res_grid,
                                  ue_pdsch_allocator&          pdsch_alloc,
                                  bool                         is_retx,
@@ -134,6 +147,18 @@ static alloc_outcome alloc_dl_ue(const ue&                    u,
       }
 
       const crb_interval ue_grant_crbs  = rb_helper::find_empty_interval_of_length(used_crbs, mcs_prbs.n_prbs, 0);
+      //crb_interval ue_grant_crbs  = rb_helper::find_empty_interval_of_length(used_crbs, mcs_prbs.n_prbs, 0);
+
+      
+      // Reduce the length of this interval to 1/4
+      // && ue_grant_crbs.stop() > 40
+      //uint8_t current_cqi = ue_cc.channel_state_manager().get_wideband_cqi().to_uint();
+      //if (!ue_grant_crbs.empty() && current_cqi < 15) {
+      //unsigned int interv_length = ue_grant_crbs.stop()-ue_grant_crbs.start();
+      //unsigned int new_interv_length = interv_length / 4;
+      //ue_grant_crbs.set(ue_grant_crbs.start(), ue_grant_crbs.start() + new_interv_length);
+      //}
+
       bool               are_crbs_valid = not ue_grant_crbs.empty(); // Cannot be empty.
       if (is_retx) {
         // In case of Retx, the #CRBs need to stay the same.
@@ -333,11 +358,11 @@ void scheduler_time_rr::dl_sched(ue_pdsch_allocator&          pdsch_alloc,
                                  const ue_resource_grid_view& res_grid,
                                  const ue_repository&         ues)
 {
-  auto tx_ue_function = [this, &res_grid, &pdsch_alloc](const ue& u) {
-    return alloc_dl_ue(u, res_grid, pdsch_alloc, false, logger);
+  auto tx_ue_function = [this, &res_grid, &pdsch_alloc](const ue& u, uint8_t cqi_sum) {
+    return alloc_dl_ue(u, cqi_sum, res_grid, pdsch_alloc, false, logger);
   };
-  auto retx_ue_function = [this, &res_grid, &pdsch_alloc](const ue& u) {
-    return alloc_dl_ue(u, res_grid, pdsch_alloc, true, logger);
+  auto retx_ue_function = [this, &res_grid, &pdsch_alloc](const ue& u, uint8_t cqi_sum) {
+    return alloc_dl_ue(u, cqi_sum, res_grid, pdsch_alloc, true, logger);
   };
 
   // First schedule re-transmissions.
