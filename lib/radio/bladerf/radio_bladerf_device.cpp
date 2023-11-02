@@ -46,12 +46,26 @@ radio_bladerf_device::~radio_bladerf_device()
 bool radio_bladerf_device::open(const std::string& device_address)
 {
   fmt::print(BLADERF_LOG_PREFIX "Opening bladeRF...\n");
+  // int status = bladerf_open(&device, device_address.c_str());
+  std::string device_address_open;
+  int status = bladerf_open(&device, device_address_open.c_str());
 
-  int status = bladerf_open(&device, device_address.c_str());
   if (status) {
     on_error("bladerf_open() failed - {}", bladerf_strerror(status));
     device = nullptr;
     return false;
+  }
+
+  // enable the oversample feature
+  int set_oversample_status = -1;
+  if (device_address == "feature=oversample") {
+    fmt::print(BLADERF_LOG_PREFIX "Try to set the oversample feature\n");
+    set_oversample_status = bladerf_enable_feature(device, BLADERF_FEATURE_OVERSAMPLE, true);
+    if (set_oversample_status<0) {
+      on_error("bladerf_enable_feature failed");
+    } else {
+      fmt::print(BLADERF_LOG_PREFIX "Successfully set OVERSAMPLE\n");
+    }
   }
 
   bladerf_tuning_mode tuning_mode     = BLADERF_TUNING_MODE_HOST;
