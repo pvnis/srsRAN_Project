@@ -25,12 +25,14 @@
 
 using namespace srsran;
 
+// comment by Haoxin
+// change the strategy_params from "time_rr" to "pp" after no bugs
 ue_scheduler_impl::ue_scheduler_impl(const scheduler_ue_expert_config& expert_cfg_,
                                      sched_configuration_notifier&     mac_notif,
                                      scheduler_metrics_handler&        metric_handler,
                                      scheduler_event_logger&           sched_ev_logger) :
   expert_cfg(expert_cfg_),
-  sched_strategy(create_scheduler_strategy(scheduler_strategy_params{"time_rr", &srslog::fetch_basic_logger("SCHED")})),
+  sched_strategy(create_scheduler_strategy(scheduler_strategy_params{"pp", &srslog::fetch_basic_logger("SCHED")})),
   ue_db(mac_notif),
   ue_alloc(expert_cfg, ue_db, srslog::fetch_basic_logger("SCHED")),
   event_mng(expert_cfg, ue_db, mac_notif, metric_handler, sched_ev_logger),
@@ -72,6 +74,12 @@ void ue_scheduler_impl::run_sched_strategy(slot_point slot_tx)
     sched_strategy->dl_sched(ue_alloc, ue_res_grid_view, ue_db, delta);
   }
   sched_strategy->ul_sched(ue_alloc, ue_res_grid_view, ue_db, delta);
+
+  // Reseting all the dl_bytes_acked 
+  for (auto it = ue_db.begin(); it != ue_db.end(); ++it) {
+    ue&           u            = **it;
+    u.dl_bytes_acked = 0;
+  } 
 }
 
 void ue_scheduler_impl::update_harq_pucch_counter(cell_resource_allocator& cell_alloc)
