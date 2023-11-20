@@ -359,6 +359,7 @@ void scheduler_pp::dl_sched(ue_pdsch_allocator&          pdsch_alloc,
     //fmt::print("brate: {}\n", db_brate) ;
 
     u.pp_weight = cqi / u.long_run_throughput;
+    //fmt::print("pp_weight: {}\n", u.pp_weight) ;
     if (u.pp_weight > max_pp_weight){
         max_pp_weight = u.pp_weight;
         max_pp_index = count;
