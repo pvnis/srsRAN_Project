@@ -104,6 +104,8 @@ private:
   /// Mutex used to lock carriers for joint carrier scheduling.
   slot_sync_point sync_point;
 
+  std::chrono::high_resolution_clock::time_point last_time;
+
   srslog::basic_logger& logger;
 };
 

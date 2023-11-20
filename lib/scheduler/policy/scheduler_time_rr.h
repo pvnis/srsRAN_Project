@@ -23,6 +23,7 @@
 #pragma once
 
 #include "scheduler_policy.h"
+#include <chrono>
 
 namespace srsran {
 
@@ -32,10 +33,10 @@ public:
   scheduler_time_rr();
 
   void
-  dl_sched(ue_pdsch_allocator& pdsch_alloc, const ue_resource_grid_view& res_grid, const ue_repository& ues) override;
+  dl_sched(ue_pdsch_allocator& pdsch_alloc, const ue_resource_grid_view& res_grid, const ue_repository& ues, std::chrono::nanoseconds delta) override;
 
   void
-  ul_sched(ue_pusch_allocator& pusch_alloc, const ue_resource_grid_view& res_grid, const ue_repository& ues) override;
+  ul_sched(ue_pusch_allocator& pusch_alloc, const ue_resource_grid_view& res_grid, const ue_repository& ues, std::chrono::nanoseconds delta) override;
 
 private:
   srslog::basic_logger& logger;

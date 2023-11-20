@@ -48,6 +48,10 @@ ue::ue(const scheduler_ue_expert_config&        expert_cfg_,
       cell->set_fallback_state(req.starts_in_fallback);
     }
   }
+  this->long_run_throughput = 0;
+  this->pp_weight = 0;
+  this->dl_bytes_acked = 0;
+  this->ul_bytes = 0;
 }
 
 void ue::slot_indication(slot_point sl_tx)

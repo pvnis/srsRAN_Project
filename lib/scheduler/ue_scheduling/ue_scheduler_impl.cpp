@@ -36,6 +36,7 @@ ue_scheduler_impl::ue_scheduler_impl(const scheduler_ue_expert_config& expert_cf
   event_mng(expert_cfg, ue_db, mac_notif, metric_handler, sched_ev_logger),
   logger(srslog::fetch_basic_logger("SCHED"))
 {
+  last_time = std::chrono::high_resolution_clock::now();
 }
 
 void ue_scheduler_impl::add_cell(const ue_scheduler_cell_params& params)
@@ -58,15 +59,19 @@ void ue_scheduler_impl::run_sched_strategy(slot_point slot_tx)
     return;
   }
 
+  std::chrono::high_resolution_clock::time_point now = std::chrono::high_resolution_clock::now();
+  auto delta = now - last_time;
+  last_time = now;
+
   // Perform round-robin prioritization of UL and DL scheduling. This gives unfair preference to DL over UL. This is
   // done to avoid the issue of sending wrong DAI value in DCI format 0_1 to UE while the PDSCH is allocated
   // right after allocating PUSCH in the same slot, resulting in gNB expecting 1 HARQ ACK bit to be multiplexed in
   // UCI in PUSCH and UE sending 4 HARQ ACK bits (DAI = 3).
   // Example: K1==K2=4 and PUSCH is allocated before PDSCH.
   if (expert_cfg.enable_csi_rs_pdsch_multiplexing or (*cells[0]->cell_res_alloc)[0].result.dl.csi_rs.empty()) {
-    sched_strategy->dl_sched(ue_alloc, ue_res_grid_view, ue_db);
+    sched_strategy->dl_sched(ue_alloc, ue_res_grid_view, ue_db, delta);
   }
-  sched_strategy->ul_sched(ue_alloc, ue_res_grid_view, ue_db);
+  sched_strategy->ul_sched(ue_alloc, ue_res_grid_view, ue_db, delta);
 }
 
 void ue_scheduler_impl::update_harq_pucch_counter(cell_resource_allocator& cell_alloc)

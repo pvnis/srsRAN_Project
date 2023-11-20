@@ -1,37 +1,19 @@
-/*
- *
- * Copyright 2021-2023 Software Radio Systems Limited
- *
- * This file is part of srsRAN.
- *
- * srsRAN is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of
- * the License, or (at your option) any later version.
- *
- * srsRAN is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * A copy of the GNU Affero General Public License can be found in
- * the LICENSE file in the top-level directory of this distribution
- * and at http://www.gnu.org/licenses/.
- *
- */
-
-#include "scheduler_time_rr.h"
+#include "scheduler_pp.h"
 #include "../support/config_helpers.h"
 #include "../support/rb_helper.h"
 #include "../ue_scheduling/ue_pdsch_param_candidate_searcher.h"
 
 using namespace srsran;
 
-/// \brief Algorithm to select next UE to allocate in a time-domain RR fashion
-/// \param[in] ue_db map of "slot_ue"
-/// \param[in] next_ue_index UE index with the highest priority to be allocated.
-/// \param[in] alloc_ue callable with signature "bool(ue&)" that returns true if UE allocation was successful.
-/// \return Index of next UE to allocate.
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////// //   //   /////   /////////     /////////       /////////       //      //   //
+///////// //   //   //      //            //     //       //     //       //      //   //
+///////// //   //   /////   ////////      /////////       /////////       //      //   // 
+///////// //   //      //   //            //     //       //     //       //      //   //
+///////// ///////   /////   ////////      //       //     //       //     //////////   /////////
+// Do not forget to remove next_ue_index in the constructor and the header file 
+
 template <typename AllocUEFunc>
 du_ue_index_t round_robin_apply(const ue_repository& ue_db, du_ue_index_t next_ue_index, const AllocUEFunc& alloc_ue)
 {
@@ -63,6 +45,18 @@ du_ue_index_t round_robin_apply(const ue_repository& ue_db, du_ue_index_t next_u
   }
   return next_ue_index;
 }
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
 
 /// Allocate UE PDSCH grant.
 static alloc_outcome alloc_dl_ue(const ue&                    u,
@@ -322,32 +316,111 @@ static alloc_outcome alloc_ul_ue(const ue&                    u,
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-scheduler_time_rr::scheduler_time_rr() :
+scheduler_pp::scheduler_pp() :
   logger(srslog::fetch_basic_logger("SCHED")),
   next_dl_ue_index(INVALID_DU_UE_INDEX),
   next_ul_ue_index(INVALID_DU_UE_INDEX)
 {
 }
 
-void scheduler_time_rr::dl_sched(ue_pdsch_allocator&          pdsch_alloc,
+void scheduler_pp::dl_sched(ue_pdsch_allocator&          pdsch_alloc,
                                  const ue_resource_grid_view& res_grid,
                                  const ue_repository&         ues,
                                  std::chrono::nanoseconds delta)
 {
-  auto tx_ue_function = [this, &res_grid, &pdsch_alloc](const ue& u) {
-    return alloc_dl_ue(u, res_grid, pdsch_alloc, false, logger);
-  };
-  auto retx_ue_function = [this, &res_grid, &pdsch_alloc](const ue& u) {
-    return alloc_dl_ue(u, res_grid, pdsch_alloc, true, logger);
-  };
+  const double mu_constant = 0.1;
+  double_t max_pp_weight = 0;
+  uint16_t count = -1;
+  uint16_t max_pp_index = -1;
 
+  // Find the UE with max weight based on proportional fairness
+  for (auto it = ues.begin(); it != ues.end(); ++it) {
+    ue&           u            = **it;
+    ++count;
+    //WARNING: assuming only one cell
+    const ue_cell& ue_cc = u.get_cell(to_ue_cell_index(0));
+
+    // calculate rate
+    // Comment from Haoxin
+    // It looks strange to me, if you keep accumulating dl_bytes_acked, and then
+    // use it to calculate brate. With time goes by, this is increasing?
+    double_t db_brate = u.dl_bytes_acked / delta.count();
+
+    // compute metric
+    uint8_t cqi = ue_cc.channel_state_manager().get_wideband_cqi().to_uint();
+
+    u.long_run_throughput = u.long_run_throughput * (1 - 1 / mu_constant) + (1 / mu_constant) * db_brate;
+    u.pp_weight = cqi / u.long_run_throughput;
+    if (u.pp_weight > max_pp_weight){
+        max_pp_weight = u.pp_weight;
+        max_pp_index = count;
+    }
+  }
+
+  // Schedule UE with max weight and then other UEs based on the fixed list
+  uint16_t count_schedule = -1;
   // First schedule re-transmissions.
-  next_dl_ue_index = round_robin_apply(ues, next_dl_ue_index, retx_ue_function);
-  // Then, schedule new transmissions.
-  next_dl_ue_index = round_robin_apply(ues, next_dl_ue_index, tx_ue_function);
+  // Skip until the max weight
+  for (auto it = ues.begin(); it != ues.end(); ++it) {
+    ue&           u            = **it;
+    ++count_schedule;
+    if (count_schedule < max_pp_index){
+        continue;
+    }
+    const alloc_outcome alloc_result = alloc_dl_ue(u, res_grid, pdsch_alloc, true, logger);
+    if (alloc_result == alloc_outcome::skip_slot) {
+      // Grid allocator directed policy to stop allocations for this slot.
+      break;
+    }
+  }
+  // Do the rest until the max weight 
+  count_schedule = -1;
+  for (auto it = ues.begin(); it != ues.end(); ++it) {
+    ue&           u            = **it;
+    ++count_schedule;
+    if (count_schedule >= max_pp_index){
+        break;
+    }
+    const alloc_outcome alloc_result = alloc_dl_ue(u, res_grid, pdsch_alloc, true, logger);
+    if (alloc_result == alloc_outcome::skip_slot) {
+      // Grid allocator directed policy to stop allocations for this slot.
+      break;
+    }
+  }
+  
+  count_schedule = -1;
+  // Then schedule transmissions.
+  // Skip until the max weight
+  for (auto it = ues.begin(); it != ues.end(); ++it) {
+    ue&           u            = **it;
+    ++count_schedule;
+    if (count_schedule < max_pp_index){
+        continue;
+    }
+    const alloc_outcome alloc_result = alloc_dl_ue(u, res_grid, pdsch_alloc, false, logger);
+    if (alloc_result == alloc_outcome::skip_slot) {
+      // Grid allocator directed policy to stop allocations for this slot.
+      break;
+    }
+  }
+  // Do the rest until the max weight 
+  count_schedule = -1;
+  for (auto it = ues.begin(); it != ues.end(); ++it) {
+    ue&           u            = **it;
+    ++count_schedule;
+    if (count_schedule >= max_pp_index){
+        break;
+    }
+    const alloc_outcome alloc_result = alloc_dl_ue(u, res_grid, pdsch_alloc, false, logger);
+    if (alloc_result == alloc_outcome::skip_slot) {
+      // Grid allocator directed policy to stop allocations for this slot.
+      break;
+    }
+  }
+
 }
 
-void scheduler_time_rr::ul_sched(ue_pusch_allocator&          pusch_alloc,
+void scheduler_pp::ul_sched(ue_pusch_allocator&          pusch_alloc,
                                  const ue_resource_grid_view& res_grid,
                                  const ue_repository&         ues,
                                  std::chrono::nanoseconds delta)

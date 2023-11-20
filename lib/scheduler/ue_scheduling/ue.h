@@ -46,6 +46,12 @@ public:
   const du_ue_index_t ue_index;
   const rnti_t        crnti;
 
+  uint64_t dl_bytes_acked;
+  uint64_t ul_bytes;
+
+  double_t long_run_throughput;
+  double_t pp_weight;
+
   void slot_indication(slot_point sl_tx);
 
   void deactivate();

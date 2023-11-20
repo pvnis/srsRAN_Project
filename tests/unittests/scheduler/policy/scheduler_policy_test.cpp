@@ -104,11 +104,12 @@ protected:
     res_grid.slot_indication(next_slot);
 
     unsigned dl_idx = next_slot.to_uint() % 2;
+    std::chrono::nanoseconds pass_delta(1000);
     for (unsigned i = 0; i != 2; ++i) {
       if (dl_idx == i) {
-        sched->dl_sched(pdsch_alloc, ue_res_grid, ues);
+        sched->dl_sched(pdsch_alloc, ue_res_grid, ues, pass_delta);
       } else {
-        sched->ul_sched(pusch_alloc, ue_res_grid, ues);
+        sched->ul_sched(pusch_alloc, ue_res_grid, ues, pass_delta);
       }
     }
 

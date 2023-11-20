@@ -221,6 +221,11 @@ void ue_event_manager::handle_harq_ind(ue_cell&                               ue
       // HARQ was found.
       const units::bytes tbs{h_dl->last_alloc_params().tb[0]->tbs_bytes};
 
+      // track acked bytes in UE
+      if (ack_value == mac_harq_ack_report_status::ack) {
+        ue_db[ue_cc.ue_index].dl_bytes_acked += tbs.value();
+      }
+
       // Log Event.
       ev_logger.enqueue(scheduler_event_logger::harq_ack_event{
           ue_cc.ue_index, ue_cc.rnti(), ue_cc.cell_index, uci_sl, h_dl->id, harq_bits[harq_idx], tbs});
