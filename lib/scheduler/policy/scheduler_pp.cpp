@@ -331,7 +331,7 @@ void scheduler_pp::dl_sched(ue_pdsch_allocator&          pdsch_alloc,
   // Printing to make sure that the PP is actually running.
   // fmt::print("PP is running!");
   
-  const double mu_constant = 2;
+  const double mu_constant = 10;
   double_t max_pp_weight = 0;
   uint16_t count = -1;
   uint16_t max_pp_index = -1;
@@ -347,17 +347,18 @@ void scheduler_pp::dl_sched(ue_pdsch_allocator&          pdsch_alloc,
     // Comment from Haoxin
     // It looks strange to me, if you keep accumulating dl_bytes_acked, and then
     // use it to calculate brate. With time goes by, this is increasing?
-    double_t db_brate = u.dl_bytes_acked / (delta.count());
+    double_t db_brate = u.dl_bytes_acked * 1000000 / (delta.count());
 
     // compute metric
     uint8_t cqi = ue_cc.channel_state_manager().get_wideband_cqi().to_uint();
 
     u.long_run_throughput = u.long_run_throughput * (1 - 1 / mu_constant) + (1 / mu_constant) * db_brate;
-    // Arman: BUG: Both db_brate and lon_run_throughput are ZERO all the time!
-    fmt::print("delta: {}\n", delta.count()) ;
-    fmt::print("dl_ack: {}\n", u.dl_bytes_acked) ;
+    //fmt::print("lrt{}: {}\n", count, u.long_run_throughput) ;
+    //fmt::print("delta: {}\n", delta.count()) ;
+    //fmt::print("dl_ack: {}\n", u.dl_bytes_acked) ;
     //fmt::print("brate: {}\n", db_brate) ;
-
+    
+    // TO DO: We should change the cqi to some channel capacity. It would be much better in that case. 
     u.pp_weight = cqi / u.long_run_throughput;
     //fmt::print("pp_weight: {}\n", u.pp_weight) ;
     if (u.pp_weight > max_pp_weight){
