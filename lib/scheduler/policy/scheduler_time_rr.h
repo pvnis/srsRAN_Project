@@ -33,10 +33,10 @@ public:
   scheduler_time_rr();
 
   void
-  dl_sched(ue_pdsch_allocator& pdsch_alloc, const ue_resource_grid_view& res_grid, const ue_repository& ues, std::chrono::nanoseconds delta) override;
+  dl_sched(ue_pdsch_allocator& pdsch_alloc, const ue_resource_grid_view& res_grid, const ue_repository& ues, bool is_ul_slot, std::chrono::nanoseconds delta) override;
 
   void
-  ul_sched(ue_pusch_allocator& pusch_alloc, const ue_resource_grid_view& res_grid, const ue_repository& ues, std::chrono::nanoseconds delta) override;
+  ul_sched(ue_pusch_allocator& pusch_alloc, const ue_resource_grid_view& res_grid, const ue_repository& ues, bool is_ul_slot, std::chrono::nanoseconds delta) override;
 
 private:
   srslog::basic_logger& logger;

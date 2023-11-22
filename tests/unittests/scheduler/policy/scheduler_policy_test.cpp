@@ -105,11 +105,12 @@ protected:
 
     unsigned dl_idx = next_slot.to_uint() % 2;
     std::chrono::nanoseconds pass_delta(1000);
+    bool pass_is_it_ul = true;
     for (unsigned i = 0; i != 2; ++i) {
       if (dl_idx == i) {
-        sched->dl_sched(pdsch_alloc, ue_res_grid, ues, pass_delta);
+        sched->dl_sched(pdsch_alloc, ue_res_grid, ues, pass_is_it_ul, pass_delta);
       } else {
-        sched->ul_sched(pusch_alloc, ue_res_grid, ues, pass_delta);
+        sched->ul_sched(pusch_alloc, ue_res_grid, ues, pass_is_it_ul, pass_delta);
       }
     }
 

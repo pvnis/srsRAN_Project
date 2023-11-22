@@ -105,6 +105,9 @@ private:
   slot_sync_point sync_point;
 
   std::chrono::high_resolution_clock::time_point last_time;
+  std::chrono::high_resolution_clock::time_point pass_last_time;
+
+  bool is_it_ul_slot;
 
   srslog::basic_logger& logger;
 };

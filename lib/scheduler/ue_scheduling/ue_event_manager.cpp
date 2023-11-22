@@ -223,6 +223,7 @@ void ue_event_manager::handle_harq_ind(ue_cell&                               ue
 
       // track acked bytes in UE
       if (ack_value == mac_harq_ack_report_status::ack) {
+        //logger.info("adder Called") ;
         ue_db[ue_cc.ue_index].dl_bytes_acked += tbs.value();
       }
 

@@ -109,7 +109,7 @@ public:
   /// \param[in] res_grid view of the current resource grid occupancy state for all gnb cells.
   /// \param[in] ues List of eligible UEs to be scheduled in the given slot.
   virtual void
-  dl_sched(ue_pdsch_allocator& pdsch_alloc, const ue_resource_grid_view& res_grid, const ue_repository& ues, std::chrono::nanoseconds delta) = 0;
+  dl_sched(ue_pdsch_allocator& pdsch_alloc, const ue_resource_grid_view& res_grid, const ue_repository& ues, bool is_ul_slot, std::chrono::nanoseconds delta) = 0;
 
   /// Schedule UE UL grants for a given {slot, cell}.
   /// \param[out] pusch_alloc PUSCH grant allocator. This object provides a handle to allocate PUSCH grants in the
@@ -117,7 +117,7 @@ public:
   /// \param[in] res_grid view of the current resource grid occupancy state for all gnb cells.
   /// \param[in] ues List of eligible UEs to be scheduled in the given slot.
   virtual void
-  ul_sched(ue_pusch_allocator& pusch_alloc, const ue_resource_grid_view& res_grid, const ue_repository& ues, std::chrono::nanoseconds delta) = 0;
+  ul_sched(ue_pusch_allocator& pusch_alloc, const ue_resource_grid_view& res_grid, const ue_repository& ues, bool is_ul_slot, std::chrono::nanoseconds delta) = 0;
 };
 
 } // namespace srsran

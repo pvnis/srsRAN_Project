@@ -39,6 +39,8 @@ ue_scheduler_impl::ue_scheduler_impl(const scheduler_ue_expert_config& expert_cf
   logger(srslog::fetch_basic_logger("SCHED"))
 {
   last_time = std::chrono::high_resolution_clock::now();
+  pass_last_time = std::chrono::high_resolution_clock::now();
+  is_it_ul_slot = false;
 }
 
 void ue_scheduler_impl::add_cell(const ue_scheduler_cell_params& params)
@@ -54,32 +56,58 @@ void ue_scheduler_impl::run_sched_strategy(slot_point slot_tx)
   // Update all UEs state.
   ue_db.slot_indication(slot_tx);
 
+  //fmt::print("TDD_Period?:{}\n", ue_res_grid_view.get_cell_cfg_common(to_du_cell_index(0)).tdd_cfg_common->pattern1.dl_ul_tx_period_nof_slots);
+
   if (not ue_res_grid_view.get_cell_cfg_common(to_du_cell_index(0)).is_dl_enabled(slot_tx)) {
     // This slot is inactive for PDCCH in this cell. We therefore, can skip the scheduling strategy.
     // Note: we are currently assuming that all cells have the same TDD pattern and that the scheduling strategy
     // only allocates PDCCHs for the current slot_tx.
+    is_it_ul_slot = true;
     return;
   }
-
-  std::chrono::high_resolution_clock::time_point now = std::chrono::high_resolution_clock::now();
-  auto delta = now - last_time;
-  last_time = now;
-
-  // Perform round-robin prioritization of UL and DL scheduling. This gives unfair preference to DL over UL. This is
-  // done to avoid the issue of sending wrong DAI value in DCI format 0_1 to UE while the PDSCH is allocated
-  // right after allocating PUSCH in the same slot, resulting in gNB expecting 1 HARQ ACK bit to be multiplexed in
-  // UCI in PUSCH and UE sending 4 HARQ ACK bits (DAI = 3).
-  // Example: K1==K2=4 and PUSCH is allocated before PDSCH.
-  if (expert_cfg.enable_csi_rs_pdsch_multiplexing or (*cells[0]->cell_res_alloc)[0].result.dl.csi_rs.empty()) {
-    sched_strategy->dl_sched(ue_alloc, ue_res_grid_view, ue_db, delta);
+  
+  // If "is_it_ul_slot" is true, so it means it is the first UL after some DLs. And this is exactly the slot in which all acks are being sent. 
+  if (is_it_ul_slot){
+    std::chrono::high_resolution_clock::time_point now = std::chrono::high_resolution_clock::now();
+    auto delta = now - last_time;
+    last_time = now;
+    // Perform round-robin prioritization of UL and DL scheduling. This gives unfair preference to DL over UL. This is
+    // done to avoid the issue of sending wrong DAI value in DCI format 0_1 to UE while the PDSCH is allocated
+    // right after allocating PUSCH in the same slot, resulting in gNB expecting 1 HARQ ACK bit to be multiplexed in
+    // UCI in PUSCH and UE sending 4 HARQ ACK bits (DAI = 3).
+    // Example: K1==K2=4 and PUSCH is allocated before PDSCH.
+    if (expert_cfg.enable_csi_rs_pdsch_multiplexing or (*cells[0]->cell_res_alloc)[0].result.dl.csi_rs.empty()) {
+      sched_strategy->dl_sched(ue_alloc, ue_res_grid_view, ue_db, is_it_ul_slot, delta);
+      //logger.info("DL called.");
+      //fmt::print("delta {}\n", delta.count()) ;
+    }
+    sched_strategy->ul_sched(ue_alloc, ue_res_grid_view, ue_db, is_it_ul_slot, delta);
+    //logger.info("UL called.");
   }
-  sched_strategy->ul_sched(ue_alloc, ue_res_grid_view, ue_db, delta);
-
+  else {
+    // Bad way to do it. I am just making some data to pass to the function, which actually not be used. 
+    std::chrono::high_resolution_clock::time_point now = std::chrono::high_resolution_clock::now();
+    auto pass_delta = now - pass_last_time;
+    pass_last_time = now;
+    // Perform round-robin prioritization of UL and DL scheduling. This gives unfair preference to DL over UL. This is
+    // done to avoid the issue of sending wrong DAI value in DCI format 0_1 to UE while the PDSCH is allocated
+    // right after allocating PUSCH in the same slot, resulting in gNB expecting 1 HARQ ACK bit to be multiplexed in
+    // UCI in PUSCH and UE sending 4 HARQ ACK bits (DAI = 3).
+    // Example: K1==K2=4 and PUSCH is allocated before PDSCH.
+    if (expert_cfg.enable_csi_rs_pdsch_multiplexing or (*cells[0]->cell_res_alloc)[0].result.dl.csi_rs.empty()) {
+      sched_strategy->dl_sched(ue_alloc, ue_res_grid_view, ue_db, is_it_ul_slot, pass_delta);
+      //logger.info("DL called.");
+      //fmt::print("delta {}\n", delta.count()) ;
+    }
+    sched_strategy->ul_sched(ue_alloc, ue_res_grid_view, ue_db, is_it_ul_slot, pass_delta);
+    //logger.info("UL called.");
+  }
   // Reseting all the dl_bytes_acked 
-  for (auto it = ue_db.begin(); it != ue_db.end(); ++it) {
-    ue&           u            = **it;
-    u.dl_bytes_acked = 0;
-  } 
+    for (auto it = ue_db.begin(); it != ue_db.end(); ++it) {
+      ue&           u            = **it;
+      u.dl_bytes_acked = 0;
+    }
+    is_it_ul_slot = false ;
 }
 
 void ue_scheduler_impl::update_harq_pucch_counter(cell_resource_allocator& cell_alloc)
@@ -140,7 +168,9 @@ void ue_scheduler_impl::run_slot(slot_point slot_tx, du_cell_index_t cell_index)
   cells[cell_index]->srb0_sched.run_slot(*cells[cell_index]->cell_res_alloc);
 
   // Synchronize all carriers. Last thread to reach this synchronization point, runs UE scheduling strategy.
+  //logger.info("(BEFORE) UE Schedule Impl slot call");
   sync_point.wait(slot_tx, ue_alloc.nof_cells(), [this, slot_tx]() { run_sched_strategy(slot_tx); });
+  //logger.info("(AFTER) UE Schedule Impl slot call");
 
   // Schedule UCI as the last step.
   cells[cell_index]->uci_sched.run_slot(*cells[cell_index]->cell_res_alloc, slot_tx);

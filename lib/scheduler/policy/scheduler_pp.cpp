@@ -323,10 +323,11 @@ scheduler_pp::scheduler_pp() :
 {
 }
 
-void scheduler_pp::dl_sched(ue_pdsch_allocator&          pdsch_alloc,
+void scheduler_pp::dl_sched(ue_pdsch_allocator&            pdsch_alloc,
                                  const ue_resource_grid_view& res_grid,
-                                 const ue_repository&         ues,
-                                 std::chrono::nanoseconds delta)
+                                 const ue_repository&              ues,
+                                 bool                    is_it_ul_slot,
+                                 std::chrono::nanoseconds        delta)
 {
   // Printing to make sure that the PP is actually running.
   // fmt::print("PP is running!");
@@ -343,20 +344,19 @@ void scheduler_pp::dl_sched(ue_pdsch_allocator&          pdsch_alloc,
     //WARNING: assuming only one cell
     const ue_cell& ue_cc = u.get_cell(to_ue_cell_index(0));
 
-    // calculate rate
-    // Comment from Haoxin
-    // It looks strange to me, if you keep accumulating dl_bytes_acked, and then
-    // use it to calculate brate. With time goes by, this is increasing?
-    double_t db_brate = u.dl_bytes_acked * 1000000 / (delta.count());
+    // We only update the long_run_throughput if this slot is the first after some ULs, so this is the slot in which we have the ack information.
+    if (is_it_ul_slot){
+      // Calculate rate
+      double_t db_brate = u.dl_bytes_acked * 8U * 1000000 / (delta.count());
+      u.long_run_throughput = u.long_run_throughput * (1 - 1 / mu_constant) + (1 / mu_constant) * db_brate;
+      //fmt::print("lrt{}: {}\n", count, u.long_run_throughput) ;
+      //fmt::print("delta: {}\n", delta.count()) ;
+      //fmt::print("dl_ack: {}\n", u.dl_bytes_acked) ;
+      //fmt::print("brate: {}\n\n", db_brate) ;
+    }
 
-    // compute metric
+    // Compute metric
     uint8_t cqi = ue_cc.channel_state_manager().get_wideband_cqi().to_uint();
-
-    u.long_run_throughput = u.long_run_throughput * (1 - 1 / mu_constant) + (1 / mu_constant) * db_brate;
-    //fmt::print("lrt{}: {}\n", count, u.long_run_throughput) ;
-    //fmt::print("delta: {}\n", delta.count()) ;
-    //fmt::print("dl_ack: {}\n", u.dl_bytes_acked) ;
-    //fmt::print("brate: {}\n", db_brate) ;
     
     // TO DO: We should change the cqi to some channel capacity. It would be much better in that case. 
     u.pp_weight = cqi / u.long_run_throughput;
@@ -430,10 +430,11 @@ void scheduler_pp::dl_sched(ue_pdsch_allocator&          pdsch_alloc,
 
 }
 
-void scheduler_pp::ul_sched(ue_pusch_allocator&          pusch_alloc,
+void scheduler_pp::ul_sched(ue_pusch_allocator&            pusch_alloc,
                                  const ue_resource_grid_view& res_grid,
-                                 const ue_repository&         ues,
-                                 std::chrono::nanoseconds delta)
+                                 const ue_repository&              ues,
+                                 bool                    is_it_ul_slot,
+                                 std::chrono::nanoseconds        delta)
 {
   auto data_retx_ue_function = [this, &res_grid, &pusch_alloc](const ue& u) {
     return alloc_ul_ue(u, res_grid, pusch_alloc, true, false, logger);

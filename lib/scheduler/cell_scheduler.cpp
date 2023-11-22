@@ -124,7 +124,8 @@ void cell_scheduler::run_slot(slot_point sl_tx)
 
   // > Schedule UE DL and UL data.
   ue_sched.run_slot(sl_tx, cell_cfg.cell_index);
-
+  //logger.info("Run Slot in cell scheduler file");
+  
   // > Log processed events.
   event_logger.log();
 

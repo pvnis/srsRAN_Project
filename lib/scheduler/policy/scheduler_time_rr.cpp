@@ -332,7 +332,8 @@ scheduler_time_rr::scheduler_time_rr() :
 void scheduler_time_rr::dl_sched(ue_pdsch_allocator&          pdsch_alloc,
                                  const ue_resource_grid_view& res_grid,
                                  const ue_repository&         ues,
-                                 std::chrono::nanoseconds delta)
+                                 bool                         is_ul_slot,
+                                 std::chrono::nanoseconds     delta)
 {
   auto tx_ue_function = [this, &res_grid, &pdsch_alloc](const ue& u) {
     return alloc_dl_ue(u, res_grid, pdsch_alloc, false, logger);
@@ -350,7 +351,8 @@ void scheduler_time_rr::dl_sched(ue_pdsch_allocator&          pdsch_alloc,
 void scheduler_time_rr::ul_sched(ue_pusch_allocator&          pusch_alloc,
                                  const ue_resource_grid_view& res_grid,
                                  const ue_repository&         ues,
-                                 std::chrono::nanoseconds delta)
+                                 bool                         is_ul_slot,
+                                 std::chrono::nanoseconds     delta)
 {
   auto data_retx_ue_function = [this, &res_grid, &pusch_alloc](const ue& u) {
     return alloc_ul_ue(u, res_grid, pusch_alloc, true, false, logger);
