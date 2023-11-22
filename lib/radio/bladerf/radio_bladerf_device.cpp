@@ -58,7 +58,8 @@ bool radio_bladerf_device::open(const std::string& device_address)
 
   // enable the oversample feature
   int set_oversample_status = -1;
-  if (device_address == "feature=oversample") {
+  if (device_address.find("feature=oversample") != std::string::npos) {
+  // if (device_address == "feature=oversample") {
     fmt::print(BLADERF_LOG_PREFIX "Try to set the oversample feature\n");
     set_oversample_status = bladerf_enable_feature(device, BLADERF_FEATURE_OVERSAMPLE, true);
     if (set_oversample_status<0) {
@@ -83,15 +84,24 @@ bool radio_bladerf_device::open(const std::string& device_address)
     return false;
   }
 
-  fmt::print(BLADERF_LOG_PREFIX "Setting manual Rx gain mode...\n");
-
-  status = bladerf_set_gain_mode(device, BLADERF_RX_X1, BLADERF_GAIN_MGC);
+  // add RX_gain option by device_args
+  if (device_address.find("rx_gain=manual") != std::string::npos) {
+    fmt::print(BLADERF_LOG_PREFIX "Setting manual Rx gain mode...\n");
+    status = bladerf_set_gain_mode(device, BLADERF_RX_X1, BLADERF_GAIN_MGC); 
+  } else {
+    fmt::print(BLADERF_LOG_PREFIX "Setting Auto-gain control Rx gain mode...\n");
+    status = bladerf_set_gain_mode(device, BLADERF_RX_X1, BLADERF_GAIN_DEFAULT); 
+  }
   if (status) {
     on_error("bladerf_set_gain_mode() failed - {}", bladerf_strerror(status));
     return false;
   }
 
-  status = bladerf_set_gain_mode(device, BLADERF_RX_X2, BLADERF_GAIN_MGC);
+  if (device_address.find("rx_gain=manual") != std::string::npos) {
+    status = bladerf_set_gain_mode(device, BLADERF_RX_X2, BLADERF_GAIN_MGC);
+  } else {
+    status = bladerf_set_gain_mode(device, BLADERF_RX_X2, BLADERF_GAIN_DEFAULT); 
+  }
   if (status) {
     on_error("bladerf_set_gain_mode() failed - {}", bladerf_strerror(status));
     return false;
