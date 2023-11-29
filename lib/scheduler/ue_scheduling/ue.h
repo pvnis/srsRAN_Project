@@ -54,7 +54,7 @@ public:
 
   srsran::sch_mcs_index mcs_value;
   pdsch_mcs_table mcs_table;
-  sch_mcs_description spectral_efficiency;
+  sch_mcs_description mcs_description;
   
   void slot_indication(slot_point sl_tx);
 

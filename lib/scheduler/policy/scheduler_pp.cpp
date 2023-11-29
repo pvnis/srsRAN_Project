@@ -118,7 +118,7 @@ static alloc_outcome alloc_dl_ue(ue&                    u,
       // Saving the MCS in the UE database for further use in scheduler. 
       u.mcs_value = mcs_prbs.mcs;
       u.mcs_table = mcs_prbs.mcs_table;
-      u.spectral_efficiency = mcs_prbs.spectral_efficiency;
+      u.mcs_description = mcs_prbs.mcs_description;
 
       if (mcs_prbs.n_prbs == 0) {
         logger.debug("ue={} rnti={:#x} PDSCH allocation skipped. Cause: UE's CQI=0 ", ue_cc.ue_index, ue_cc.rnti());
@@ -363,13 +363,12 @@ void scheduler_pp::dl_sched(ue_pdsch_allocator&            pdsch_alloc,
 
     // Compute metric
     //uint8_t cqi = ue_cc.channel_state_manager().get_wideband_cqi().to_uint();
-    uint8_t mcs = u.mcs_value.to_uint();
-    sch_mcs_description spectral_efficiency;
-    logger.info("SPE: {}\n", spectral_efficiency);
+    //logger.info("SPE: {}\n", spectral_efficiency.target_code_rate);
+    //logger.info("SPE: {}\n", spectral_efficiency.get_spectral_efficiency());
     
     // TO DO: We should change the cqi to some channel capacity. It would be much better in that case. 
-    u.pp_weight = mcs / u.long_run_throughput;
-    //fmt::print("pp_weight: {}\n", u.pp_weight) ;
+    u.pp_weight = u.mcs_description.get_spectral_efficiency() / u.long_run_throughput;
+    logger.info("PP_Weight: {}\n", u.pp_weight);
     if (u.pp_weight > max_pp_weight){
         max_pp_weight = u.pp_weight;
         max_pp_index = count;

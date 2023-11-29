@@ -43,7 +43,7 @@ struct grant_prbs_mcs {
   /// The number of mcs table 
   pdsch_mcs_table   mcs_table;
   /// Spectural efficiency based on MCS and table number
-  sch_mcs_description spectral_efficiency;
+  sch_mcs_description mcs_description;
 };
 
 /// \brief Context respective to a UE serving cell.
