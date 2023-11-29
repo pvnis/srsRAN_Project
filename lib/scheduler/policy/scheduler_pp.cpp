@@ -59,7 +59,7 @@ du_ue_index_t round_robin_apply(const ue_repository& ue_db, du_ue_index_t next_u
 
 
 /// Allocate UE PDSCH grant.
-static alloc_outcome alloc_dl_ue(const ue&                    u,
+static alloc_outcome alloc_dl_ue(ue&                    u,
                                  const ue_resource_grid_view& res_grid,
                                  ue_pdsch_allocator&          pdsch_alloc,
                                  bool                         is_retx,
@@ -114,6 +114,12 @@ static alloc_outcome alloc_dl_ue(const ue&                    u,
       grant_prbs_mcs   mcs_prbs  = is_retx ? grant_prbs_mcs{h.last_alloc_params().tb.front().value().mcs,
                                                          h.last_alloc_params().rbs.type1().length()}
                                            : ue_cc.required_dl_prbs(pdsch, u.pending_dl_newtx_bytes(), dci_type);
+
+      // Saving the MCS in the UE database for further use in scheduler. 
+      u.mcs_value = mcs_prbs.mcs;
+      u.mcs_table = mcs_prbs.mcs_table;
+      u.spectral_efficiency = mcs_prbs.spectral_efficiency;
+
       if (mcs_prbs.n_prbs == 0) {
         logger.debug("ue={} rnti={:#x} PDSCH allocation skipped. Cause: UE's CQI=0 ", ue_cc.ue_index, ue_cc.rnti());
         return alloc_outcome::skip_ue;
@@ -332,7 +338,7 @@ void scheduler_pp::dl_sched(ue_pdsch_allocator&            pdsch_alloc,
   // Printing to make sure that the PP is actually running.
   // fmt::print("PP is running!");
   
-  const double mu_constant = 10;
+  const double mu_constant = 10000;
   double_t max_pp_weight = 0;
   uint16_t count = -1;
   uint16_t max_pp_index = -1;
@@ -342,7 +348,7 @@ void scheduler_pp::dl_sched(ue_pdsch_allocator&            pdsch_alloc,
     ue&           u            = **it;
     ++count;
     //WARNING: assuming only one cell
-    const ue_cell& ue_cc = u.get_cell(to_ue_cell_index(0));
+    //const ue_cell& ue_cc = u.get_cell(to_ue_cell_index(0));
 
     // We only update the long_run_throughput if this slot is the first after some ULs, so this is the slot in which we have the ack information.
     if (is_it_ul_slot){
@@ -356,10 +362,13 @@ void scheduler_pp::dl_sched(ue_pdsch_allocator&            pdsch_alloc,
     }
 
     // Compute metric
-    uint8_t cqi = ue_cc.channel_state_manager().get_wideband_cqi().to_uint();
+    //uint8_t cqi = ue_cc.channel_state_manager().get_wideband_cqi().to_uint();
+    uint8_t mcs = u.mcs_value.to_uint();
+    sch_mcs_description spectral_efficiency;
+    logger.info("SPE: {}\n", spectral_efficiency);
     
     // TO DO: We should change the cqi to some channel capacity. It would be much better in that case. 
-    u.pp_weight = cqi / u.long_run_throughput;
+    u.pp_weight = mcs / u.long_run_throughput;
     //fmt::print("pp_weight: {}\n", u.pp_weight) ;
     if (u.pp_weight > max_pp_weight){
         max_pp_weight = u.pp_weight;

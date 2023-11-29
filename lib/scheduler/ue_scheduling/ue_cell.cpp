@@ -95,8 +95,9 @@ grant_prbs_mcs ue_cell::required_dl_prbs(const pdsch_time_domain_resource_alloca
     default:
       report_fatal_error("Unsupported PDCCH DCI UL format");
   }
-
   optional<sch_mcs_index> mcs = ue_mcs_calculator.calculate_dl_mcs(pdsch_cfg.mcs_table);
+
+  //logger.info("MCS Table: {}", pdsch_cfg.mcs_table);
   if (not mcs.has_value()) {
     // Return a grant with no PRBs if the MCS is invalid (CQI is either 0, for UE out of range, or > 15).
     return grant_prbs_mcs{.n_prbs = 0};
@@ -123,7 +124,7 @@ grant_prbs_mcs ue_cell::required_dl_prbs(const pdsch_time_domain_resource_alloca
   nof_prbs = std::max(std::min(nof_prbs, ue_res_alloc_cfg.pdsch_grant_size_limits.stop()),
                       ue_res_alloc_cfg.pdsch_grant_size_limits.start());
 
-  return grant_prbs_mcs{mcs.value(), nof_prbs};
+  return grant_prbs_mcs{mcs.value(), nof_prbs, pdsch_cfg.mcs_table, srsran::pdsch_mcs_get_config(pdsch_cfg.mcs_table, mcs.value())};
 }
 
 grant_prbs_mcs ue_cell::required_ul_prbs(const pusch_time_domain_resource_allocation& pusch_td_cfg,

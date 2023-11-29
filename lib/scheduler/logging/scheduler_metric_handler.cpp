@@ -156,6 +156,7 @@ void scheduler_metrics_handler::report_metrics()
 
   // Report all UE metrics in a batch.
   notifier.report_metrics(metrics_report);
+  //fmt::print("Report Called\n");
 }
 
 void scheduler_metrics_handler::handle_slot_result(const sched_result& slot_result)

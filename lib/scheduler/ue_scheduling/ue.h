@@ -52,6 +52,10 @@ public:
   double_t long_run_throughput;
   double_t pp_weight;
 
+  srsran::sch_mcs_index mcs_value;
+  pdsch_mcs_table mcs_table;
+  sch_mcs_description spectral_efficiency;
+  
   void slot_indication(slot_point sl_tx);
 
   void deactivate();

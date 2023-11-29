@@ -52,6 +52,7 @@ ue::ue(const scheduler_ue_expert_config&        expert_cfg_,
   this->pp_weight = 0;
   this->dl_bytes_acked = 0;
   this->ul_bytes = 0;
+  this->mcs_value = 0;
 }
 
 void ue::slot_indication(slot_point sl_tx)
