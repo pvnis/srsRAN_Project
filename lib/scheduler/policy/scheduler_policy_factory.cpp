@@ -27,5 +27,13 @@ using namespace srsran;
 
 std::unique_ptr<scheduler_policy> srsran::create_scheduler_strategy(const scheduler_strategy_params& params)
 {
-  return std::make_unique<scheduler_time_rr>();
+  if (params.strategy == "time_rr") {
+    return std::make_unique<scheduler_time_rr>(params.ue_alloc);
+  }
+
+  if (params.strategy == "wasm") {
+    return std::make_unique<scheduler_policy_adapter>(params.ue_alloc);
+  }
+  
+  throw std::runtime_error("Invalid scheduler strategy: " + params.strategy);
 }

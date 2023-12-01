@@ -29,6 +29,7 @@ namespace srsran {
 struct scheduler_strategy_params {
   std::string           strategy = "time_rr";
   srslog::basic_logger* logger;
+  ue_cell_grid_allocator& ue_alloc;
 };
 
 std::unique_ptr<scheduler_policy> create_scheduler_strategy(const scheduler_strategy_params& params);

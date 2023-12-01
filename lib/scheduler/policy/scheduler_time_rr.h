@@ -29,7 +29,7 @@ namespace srsran {
 class scheduler_time_rr : public scheduler_policy
 {
 public:
-  scheduler_time_rr();
+  scheduler_time_rr(ue_cell_grid_allocator& ue_alloc;);
 
   void
   dl_sched(ue_pdsch_allocator& pdsch_alloc, const ue_resource_grid_view& res_grid, const ue_repository& ues) override;
