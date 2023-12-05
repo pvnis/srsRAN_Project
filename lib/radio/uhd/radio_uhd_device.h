@@ -372,6 +372,17 @@ public:
       usrp->set_rx_gain(gain, ch);
     });
   }
+
+  bool set_rx_agc(bool enable, size_t ch)
+  {
+    logger.debug("Setting channel {} Rx AGC to {}", ch, enable);
+
+    return safe_execution([this, enable, ch]() {
+
+      usrp->set_rx_agc(enable, ch);
+    });
+  }
+
   bool set_tx_freq(uint32_t ch, const radio_configuration::lo_frequency& config)
   {
     logger.debug("Setting channel {} Tx frequency to {} MHz.", ch, to_MHz(config.center_frequency_hz));

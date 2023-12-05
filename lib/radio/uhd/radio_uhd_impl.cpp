@@ -141,6 +141,18 @@ bool radio_session_uhd_impl::set_rx_gain_unprotected(unsigned port_idx, double g
   return true;
 }
 
+bool radio_session_uhd_impl::set_rx_agc(bool enable, unsigned port_idx)
+{
+  fmt::print("Trying to set the RX AGC to {} \n", enable);
+  // Setup gain.
+  if (!device.set_rx_agc(enable, port_idx)) {
+    fmt::print("Error: setting AGC for receiver {}. {}\n", port_idx, device.get_error_message());
+    return false;
+  }
+
+  return true;
+}
+
 bool radio_session_uhd_impl::set_tx_freq(unsigned port_idx, radio_configuration::lo_frequency frequency)
 {
   if (port_idx >= tx_port_map.size()) {
@@ -417,6 +429,13 @@ radio_session_uhd_impl::radio_session_uhd_impl(const radio_configuration::radio&
 
       // Extract port configuration.
       const radio_configuration::channel& channel = stream.channels[channel_idx];
+
+      // Setup rx gain mode
+      fmt::print("Trying to set AGC for USRP\n", port_idx);
+      fmt::print("radio_config args are: {}\n", radio_config.args);
+      if (!set_rx_agc(radio_config.args.find("rx_gain=manual") == std::string::npos, port_idx)) {
+        return;
+      }
 
       // Setup gain.
       if (!set_rx_gain_unprotected(port_idx, channel.gain_dB)) {

@@ -85,6 +85,12 @@ private:
   /// \return True if the port index and gain value are valid, and no exception is caught. Otherwise false.
   bool set_rx_gain_unprotected(unsigned port_idx, double gain_dB);
 
+  /// \brief Set reception gain mode from the class itself.
+  /// \param[in] port_idx Indicates the port index.
+  /// \param[in] enable Indicates to enable or not.
+  /// \return True if the port index and gain value are valid, and no exception is caught. Otherwise false.
+  bool set_rx_agc(bool enable, unsigned port_idx);
+
   /// \brief Set transmission frequency.
   /// \param[in] port_idx Indicates the port index.
   /// \param[in] frequency Provides the frequency tuning parameters
