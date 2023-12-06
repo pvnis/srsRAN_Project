@@ -1,4 +1,4 @@
-#include "scheduler_pp.h"
+#include "scheduler_max_throughput.h"
 #include "../support/config_helpers.h"
 #include "../support/rb_helper.h"
 #include "../ue_scheduling/ue_pdsch_param_candidate_searcher.h"
@@ -48,13 +48,13 @@ du_ue_index_t round_robin_apply(const ue_repository& ue_db, du_ue_index_t next_u
 */
 
 template <typename AllocUEFunc>
-void proportional_fair_scheduler(std::vector<std::pair<double_t, ue*>> weight_UE_index_pair, const AllocUEFunc& alloc_ue)
+void max_throughput_scheduler(std::vector<std::pair<double_t, ue*>> weight_UE_index_pair, const AllocUEFunc& alloc_ue)
 {
   // Sort the vector based on the first element of the pair (the weight) in descending order
   std::sort(weight_UE_index_pair.rbegin(), weight_UE_index_pair.rend());
-
+  
   // Go through all UEs based on the sorted weights (First is the primary one which is scheduled first based on Type 0 allocation. Rest are to not waste the resources.)
-  for (const auto& item : weight_UE_index_pair) {
+   for (const auto& item : weight_UE_index_pair) {
     ue& u = *(item.second);
     const alloc_outcome alloc_result = alloc_ue(u);
     if (alloc_result == alloc_outcome::skip_slot) {
@@ -341,14 +341,14 @@ static alloc_outcome alloc_ul_ue(const ue&                    u,
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-scheduler_pp::scheduler_pp() :
+scheduler_max_throughput::scheduler_max_throughput() :
   logger(srslog::fetch_basic_logger("SCHED"))
   //next_dl_ue_index(INVALID_DU_UE_INDEX),
   //next_ul_ue_index(INVALID_DU_UE_INDEX)
 {
 }
 
-void scheduler_pp::dl_sched(ue_pdsch_allocator&            pdsch_alloc,
+void scheduler_max_throughput::dl_sched(ue_pdsch_allocator&            pdsch_alloc,
                                  const ue_resource_grid_view& res_grid,
                                  const ue_repository&              ues,
                                  bool                    is_it_ul_slot,
@@ -356,23 +356,12 @@ void scheduler_pp::dl_sched(ue_pdsch_allocator&            pdsch_alloc,
 { 
   // A vector with pairs of weights and indexes of the corresponing UEs. It is used to copy the weights localy to sort them later. 
   std::vector<std::pair<double_t, ue*>> weight_UE_index_pair;
-  
-  // mu constant for the weight calculation
-  const double mu_constant = 10000;
 
   // Update the weights of UEs in this slot 
   for (auto it = ues.begin(); it != ues.end(); ++it) {
     ue&           u            = **it;
-
-    // We only update the long_run_throughput if this slot is the first after some ULs, so this is the slot in which we have the ack information.
-    if (is_it_ul_slot){
-      // Calculate rate
-      double_t db_brate = u.dl_bytes_acked * 8U * 1000000 / (delta.count());
-      u.long_run_throughput = u.long_run_throughput * (1 - 1 / mu_constant) + (1 / mu_constant) * db_brate;
-    }
-
     // Compute the weight  
-    u.pp_weight = u.mcs_description.get_spectral_efficiency() / u.long_run_throughput;
+    u.pp_weight = u.mcs_description.get_spectral_efficiency();
     // Add the weight and the UE object reference to the vector
     weight_UE_index_pair.push_back(std::make_pair(u.pp_weight, &u));
   }
@@ -386,14 +375,14 @@ void scheduler_pp::dl_sched(ue_pdsch_allocator&            pdsch_alloc,
   };
 
   // First schedule re-transmissions.
-  proportional_fair_scheduler(weight_UE_index_pair, retx_ue_function);
+  max_throughput_scheduler(weight_UE_index_pair, retx_ue_function);
 
   // Then schedule transmissions.
-  proportional_fair_scheduler(weight_UE_index_pair, tx_ue_function);
+  max_throughput_scheduler(weight_UE_index_pair, tx_ue_function);
   
 }
 
-void scheduler_pp::ul_sched(ue_pusch_allocator&            pusch_alloc,
+void scheduler_max_throughput::ul_sched(ue_pusch_allocator&            pusch_alloc,
                                  const ue_resource_grid_view& res_grid,
                                  const ue_repository&              ues,
                                  bool                    is_it_ul_slot,
@@ -422,7 +411,6 @@ void scheduler_pp::ul_sched(ue_pusch_allocator&            pusch_alloc,
 
   for (auto it = ues.begin(); it != ues.end(); ++it) {
     ue&           u            = **it;
-
     // Add the weight and the UE object reference to the vector
     weight_UE_index_pair.push_back(std::make_pair(u.pp_weight, &u));
   }

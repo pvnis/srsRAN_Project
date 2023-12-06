@@ -23,6 +23,7 @@
 #include "scheduler_policy_factory.h"
 #include "scheduler_time_rr.h"
 #include "scheduler_pp.h"
+#include "scheduler_max_throughput.h"
 
 using namespace srsran;
 
@@ -35,6 +36,10 @@ std::unique_ptr<scheduler_policy> srsran::create_scheduler_strategy(const schedu
   
   if (params.strategy == "pp") {
     return std::make_unique<scheduler_pp>();
+  }
+
+  if (params.strategy == "max_throughput") {
+    return std::make_unique<scheduler_max_throughput>();
   }
   
   else {
