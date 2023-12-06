@@ -14,7 +14,7 @@ using namespace srsran;
 ///////// ///////   /////   ////////      //       //     //       //     //////////   /////////
 // Do not forget to remove next_ue_index in the constructor and the header file 
 
-template <typename AllocUEFunc>
+/*
 du_ue_index_t round_robin_apply(const ue_repository& ue_db, du_ue_index_t next_ue_index, const AllocUEFunc& alloc_ue)
 {
   if (ue_db.empty()) {
@@ -44,6 +44,20 @@ du_ue_index_t round_robin_apply(const ue_repository& ue_db, du_ue_index_t next_u
     }
   }
   return next_ue_index;
+}
+*/
+
+template <typename AllocUEFunc>
+void proportional_fair_scheduler(std::vector<std::pair<double_t, ue*>> weight_UE_index_pair, const AllocUEFunc& alloc_ue)
+{
+   for (const auto& item : weight_UE_index_pair) {
+    ue& u = *(item.second);
+    const alloc_outcome alloc_result = alloc_ue(u);
+    if (alloc_result == alloc_outcome::skip_slot) {
+      // Grid allocator directed policy to stop allocations for this slot.
+      break;
+    }
+  }
 }
 
 
@@ -324,9 +338,9 @@ static alloc_outcome alloc_ul_ue(const ue&                    u,
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 scheduler_pp::scheduler_pp() :
-  logger(srslog::fetch_basic_logger("SCHED")),
-  next_dl_ue_index(INVALID_DU_UE_INDEX),
-  next_ul_ue_index(INVALID_DU_UE_INDEX)
+  logger(srslog::fetch_basic_logger("SCHED"))
+  //next_dl_ue_index(INVALID_DU_UE_INDEX),
+  //next_ul_ue_index(INVALID_DU_UE_INDEX)
 {
 }
 
@@ -336,14 +350,13 @@ void scheduler_pp::dl_sched(ue_pdsch_allocator&            pdsch_alloc,
                                  bool                    is_it_ul_slot,
                                  std::chrono::nanoseconds        delta)
 { 
+  // A vector with pairs of weights and indexes of the corresponing UEs. It is used to copy the weights localy to sort them later. 
+  std::vector<std::pair<double_t, ue*>> weight_UE_index_pair;
+  
   // mu constant for the weight calculation
   const double mu_constant = 10000;
 
-  // Copy the weights localy to sort them later 
-  // A vector with pairs of weights and indexes of the corresponing UEs
-  std::vector<std::pair<double_t, ue*>> weight_UE_index_pair;
-
-  // Update the weights of UE in this slot 
+  // Update the weights of UEs in this slot 
   for (auto it = ues.begin(); it != ues.end(); ++it) {
     ue&           u            = **it;
 
@@ -363,25 +376,20 @@ void scheduler_pp::dl_sched(ue_pdsch_allocator&            pdsch_alloc,
   // Sort the vector based on the first element of the pair (the weight) in descending order
   std::sort(weight_UE_index_pair.rbegin(), weight_UE_index_pair.rend());
 
+  // Define the functions to be used in the proportional fair scheduler
+  auto retx_ue_function = [this, &res_grid, &pdsch_alloc](ue& u) {
+    return alloc_dl_ue(u, res_grid, pdsch_alloc, true, logger);
+  };
+  auto tx_ue_function = [this, &res_grid, &pdsch_alloc](ue& u) {
+    return alloc_dl_ue(u, res_grid, pdsch_alloc, false, logger);
+  };
+
   // First schedule re-transmissions.
-  for (const auto& item : weight_UE_index_pair) {
-    ue& u = *(item.second);
-    const alloc_outcome alloc_result = alloc_dl_ue(u, res_grid, pdsch_alloc, true, logger);
-    if (alloc_result == alloc_outcome::skip_slot) {
-      // Grid allocator directed policy to stop allocations for this slot.
-      break;
-    }
-  }
+  proportional_fair_scheduler(weight_UE_index_pair, retx_ue_function);
 
   // Then schedule transmissions.
-  for (const auto& item : weight_UE_index_pair) {
-    ue& u = *item.second;
-    const alloc_outcome alloc_result = alloc_dl_ue(u, res_grid, pdsch_alloc, false, logger);
-    if (alloc_result == alloc_outcome::skip_slot) {
-      // Grid allocator directed policy to stop allocations for this slot.
-      break;
-    }
-  } 
+  proportional_fair_scheduler(weight_UE_index_pair, tx_ue_function);
+  
 }
 
 void scheduler_pp::ul_sched(ue_pusch_allocator&            pusch_alloc,
