@@ -30,6 +30,7 @@ set(SOURCES
         policy/scheduler_policy_factory.cpp
         policy/scheduler_time_rr.cpp
         policy/scheduler_pp.cpp
+        policy/scheduler_max_throughput.cpp
         pucch_scheduling/pucch_allocator_impl.cpp
         pucch_scheduling/pucch_guardbands_scheduler.cpp
         pucch_scheduling/pucch_resource_manager.cpp
