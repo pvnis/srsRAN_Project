@@ -235,7 +235,7 @@ public:
   unsigned get_buffer_size() const;
 
   // See interface for documentation.
-  void transmit(const baseband_gateway_buffer_reader& data, const metadata& metadata) override;
+  void transmit(const baseband_gateway_buffer_reader& data, const baseband_gateway_transmitter_metadata& metadata) override;
 
   /// Stop the transmission.
   void stop();

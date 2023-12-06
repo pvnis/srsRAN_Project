@@ -108,13 +108,13 @@ radio_bladerf_tx_stream::radio_bladerf_tx_stream(bladerf*                    dev
   }
 
   // Disable libusb event handling on this stream and let the Rx thread do all the handling.
-  status = bladerf_enable_feature(device, bladerf_feature::BLADERF_FEATURE_DEFAULT, true);
+  status = bladerf_enable_feature(device, bladerf_feature::BLADERF_FEATURE_RX_ALL_EVENTS, true);
   if (status != 0) {
     on_error("bladerf_enable_feature(BLADERF_FEATURE_RX_ALL_EVENTS, true) failed - {}", bladerf_strerror(status));
   }
 
   for (size_t channel = 0; channel < nof_channels; channel++) {
-    fmt::print(BLADERF_LOG_PREFIX "Enabling Tx module for channel {}...\n", channel + 1);
+    fmt::print(BLADERF_LOG_PREFIX "Enabling Tx module for channel {}...\n", channel);
 
     status = bladerf_enable_module(device, BLADERF_CHANNEL_TX(channel), true);
     if (status != 0) {
@@ -194,8 +194,8 @@ void* radio_bladerf_tx_stream::stream_cb(struct bladerf*          dev,
   return BLADERF_STREAM_NO_DATA;
 }
 
-void radio_bladerf_tx_stream::transmit(const baseband_gateway_buffer_reader&         buffs,
-                                       const baseband_gateway_transmitter::metadata& tx_md)
+void radio_bladerf_tx_stream::transmit(const baseband_gateway_buffer_reader&        buffs,
+                                       const baseband_gateway_transmitter_metadata& tx_md)
 {
   // Ignore if not streaming.
   if (state != states::STREAMING) {
@@ -389,7 +389,7 @@ void radio_bladerf_tx_stream::stop()
   bladerf_deinit_stream(stream);
 
   for (size_t channel = 0; channel < nof_channels; channel++) {
-    fmt::print(BLADERF_LOG_PREFIX "Disabling Tx module for channel {}...\n", channel + 1);
+    fmt::print(BLADERF_LOG_PREFIX "Disabling Tx module for channel {}...\n", channel);
 
     int status = bladerf_enable_module(device, BLADERF_CHANNEL_TX(channel), false);
     if (status != 0) {
