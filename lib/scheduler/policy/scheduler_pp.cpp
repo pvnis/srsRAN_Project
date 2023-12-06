@@ -179,12 +179,6 @@ static alloc_outcome alloc_ul_ue(const ue&                    u,
     }
   }
 
-  /*
-  if ((is_retx and (not schedule_sr_only)) or ((not is_retx) and schedule_sr_only)) {
-    fmt::print("Passed");
-  }
-  */
-
   const slot_point pdcch_slot = res_grid.get_pdcch_slot();
 
   // Prioritize PCell over SCells.
@@ -341,191 +335,53 @@ void scheduler_pp::dl_sched(ue_pdsch_allocator&            pdsch_alloc,
                                  const ue_repository&              ues,
                                  bool                    is_it_ul_slot,
                                  std::chrono::nanoseconds        delta)
-{
-  // Printing to make sure that the PP is actually running.
-  // fmt::print("PP is running!");
-  
+{ 
+  // mu constant for the weight calculation
   const double mu_constant = 10000;
-  //double_t max_pp_weight = 0;
-  //uint16_t count = -1;
-  //uint16_t max_pp_index = -1;
 
-  // Save the weights localy to sort them later 
-  //make a vector with pairs of weights and indexes
-  std::vector<std::pair<double_t, ue*>> vectorWithTwoItems;
-  // Find the UE with max weight based on proportional fairness
+  // Copy the weights localy to sort them later 
+  // A vector with pairs of weights and indexes of the corresponing UEs
+  std::vector<std::pair<double_t, ue*>> weight_UE_index_pair;
+
+  // Update the weights of UE in this slot 
   for (auto it = ues.begin(); it != ues.end(); ++it) {
     ue&           u            = **it;
-    //++count;
-    //WARNING: assuming only one cell
-    //const ue_cell& ue_cc = u.get_cell(to_ue_cell_index(0));
 
     // We only update the long_run_throughput if this slot is the first after some ULs, so this is the slot in which we have the ack information.
     if (is_it_ul_slot){
       // Calculate rate
       double_t db_brate = u.dl_bytes_acked * 8U * 1000000 / (delta.count());
       u.long_run_throughput = u.long_run_throughput * (1 - 1 / mu_constant) + (1 / mu_constant) * db_brate;
-      //fmt::print("lrt{}: {}\n", count, u.long_run_throughput) ;
-      //fmt::print("delta: {}\n", delta.count()) ;
-      //fmt::print("dl_ack: {}\n", u.dl_bytes_acked) ;
-      //fmt::print("brate: {}\n\n", db_brate) ;
     }
 
-    // Compute metric
-    //uint8_t cqi = ue_cc.channel_state_manager().get_wideband_cqi().to_uint();
-    //logger.info("SPE: {}\n", spectral_efficiency.target_code_rate);
-    //logger.info("SPE: {}\n", spectral_efficiency.get_spectral_efficiency());
-    
+    // Compute the weight  
     u.pp_weight = u.mcs_description.get_spectral_efficiency() / u.long_run_throughput;
-    //fmt::print("weight1: {}\n", u.pp_weight);
-    // add the weight and the u object reference to the vector
-    vectorWithTwoItems.push_back(std::make_pair(u.pp_weight, &u));
-
-    /*
-    if (u.pp_weight > max_pp_weight){
-        max_pp_weight = u.pp_weight;
-        max_pp_index = count;
-    }
-    */
+    // Add the weight and the UE object reference to the vector
+    weight_UE_index_pair.push_back(std::make_pair(u.pp_weight, &u));
   }
 
-  // Sort vector based on the first element of the pair (the weight)
-  std::sort(vectorWithTwoItems.rbegin(), vectorWithTwoItems.rend());
+  // Sort the vector based on the first element of the pair (the weight) in descending order
+  std::sort(weight_UE_index_pair.rbegin(), weight_UE_index_pair.rend());
 
-  // Schedule UE with max weight and then other UEs based on the fixed list
-  
   // First schedule re-transmissions.
-  // Skip until the max weight, then schedule the max weight and then the rest of list after that
-
-  for (const auto& item : vectorWithTwoItems) {
-    //double_t weight = item.first;
+  for (const auto& item : weight_UE_index_pair) {
     ue& u = *(item.second);
-    //fmt::print("weight: {}\n", u.pp_weight);
     const alloc_outcome alloc_result = alloc_dl_ue(u, res_grid, pdsch_alloc, true, logger);
     if (alloc_result == alloc_outcome::skip_slot) {
       // Grid allocator directed policy to stop allocations for this slot.
-      //skip_slot_flag = true;
       break;
     }
   }
 
-  /*
-    bool skip_slot_flag = false;
-    for (uint16_t i = 0; i < pp_weights.size(); i++) {
-      for (auto it = ues.begin(); it != ues.end(); ++it) {
-        ue&           u            = **it;
-        if (u.pp_weight == pp_weights[i]){
-          const alloc_outcome alloc_result = alloc_dl_ue(u, res_grid, pdsch_alloc, true, logger);
-          if (alloc_result == alloc_outcome::skip_slot) {
-            // Grid allocator directed policy to stop allocations for this slot.
-            skip_slot_flag = true;
-            break;
-          }
-          break;
-        }
-      }
-      if (skip_slot_flag){
-        break;
-      }
-    }
-  
-    ////////////////
-    uint16_t count_schedule = -1;
-    for (auto it = ues.begin(); it != ues.end(); ++it) {
-      ue&           u            = **it;
-      ++count_schedule;
-      if (count_schedule < max_pp_index){
-          continue;
-      }
-      const alloc_outcome alloc_result = alloc_dl_ue(u, res_grid, pdsch_alloc, true, logger);
-      if (alloc_result == alloc_outcome::skip_slot) {
-        // Grid allocator directed policy to stop allocations for this slot.
-        break;
-      }
-    }
-    // Do the rest from start until the max weight (wrap around actually)
-    count_schedule = -1;
-    for (auto it = ues.begin(); it != ues.end(); ++it) {
-      ue&           u            = **it;
-      ++count_schedule;
-      if (count_schedule >= max_pp_index){
-          break;
-      }
-      const alloc_outcome alloc_result = alloc_dl_ue(u, res_grid, pdsch_alloc, true, logger);
-      if (alloc_result == alloc_outcome::skip_slot) {
-        // Grid allocator directed policy to stop allocations for this slot.
-        break;
-      }
-    }
-    */
-  
-
-    // Then schedule transmissions.
-    // Skip until the max weight, then schedule the max weight and then the rest of list after that 
-  //int count = 0;
-  for (const auto& item : vectorWithTwoItems) {
-    //double_t weight = item.first;
+  // Then schedule transmissions.
+  for (const auto& item : weight_UE_index_pair) {
     ue& u = *item.second;
-    //++count;
-    //fmt::print("Weight of {}: {}\n\n",count, u.pp_weight);
     const alloc_outcome alloc_result = alloc_dl_ue(u, res_grid, pdsch_alloc, false, logger);
     if (alloc_result == alloc_outcome::skip_slot) {
       // Grid allocator directed policy to stop allocations for this slot.
-      //skip_slot_flag = true;
       break;
     }
-  }
-  /*
-
-    skip_slot_flag = false;
-    for (uint16_t i = 0; i < pp_weights.size(); i++) {
-      for (auto it = ues.begin(); it != ues.end(); ++it) {
-        ue&           u            = **it;
-        if (u.pp_weight == pp_weights[i]){
-          const alloc_outcome alloc_result = alloc_dl_ue(u, res_grid, pdsch_alloc, false, logger);
-          if (alloc_result == alloc_outcome::skip_slot) {
-            // Grid allocator directed policy to stop allocations for this slot.
-            skip_slot_flag = true;
-            break;
-          }
-          break;
-        }
-      }
-      if (skip_slot_flag){
-        break;
-      }
-    }
-    
-    //////////////////////////
-    count_schedule = -1;
-    for (auto it = ues.begin(); it != ues.end(); ++it) {
-      ue&           u            = **it;
-      ++count_schedule;
-      if (count_schedule < max_pp_index){
-          continue;
-      }
-      const alloc_outcome alloc_result = alloc_dl_ue(u, res_grid, pdsch_alloc, false, logger);
-      if (alloc_result == alloc_outcome::skip_slot) {
-        // Grid allocator directed policy to stop allocations for this slot.
-        break;
-      }
-    }
-    // Do the rest from start until the max weight (wrap around actually)
-    count_schedule = -1;
-    for (auto it = ues.begin(); it != ues.end(); ++it) {
-      ue&           u            = **it;
-      ++count_schedule;
-      if (count_schedule >= max_pp_index){
-          break;
-      }
-      const alloc_outcome alloc_result = alloc_dl_ue(u, res_grid, pdsch_alloc, false, logger);
-      if (alloc_result == alloc_outcome::skip_slot) {
-        // Grid allocator directed policy to stop allocations for this slot.
-        break;
-      }
-    }
-    */
-    
+  } 
 }
 
 void scheduler_pp::ul_sched(ue_pusch_allocator&            pusch_alloc,
@@ -553,52 +409,44 @@ void scheduler_pp::ul_sched(ue_pusch_allocator&            pusch_alloc,
   */
 
   /////////////////////////////////////////////////////////////
-  std::vector<std::pair<double_t, ue*>> vectorWithTwoItems;
+  std::vector<std::pair<double_t, ue*>> weight_UE_index_pair;
 
   for (auto it = ues.begin(); it != ues.end(); ++it) {
     ue&           u            = **it;
 
-    // add the weight and the u object reference to the vector
-    vectorWithTwoItems.push_back(std::make_pair(u.pp_weight, &u));
+    // Add the weight and the UE object reference to the vector
+    weight_UE_index_pair.push_back(std::make_pair(u.pp_weight, &u));
   }
 
-  std::sort(vectorWithTwoItems.rbegin(), vectorWithTwoItems.rend());
-  //int count = 0;
-  for (const auto& item : vectorWithTwoItems) {
-    //double_t weight = item.first;
+  // Sort the vector based on the first element of the pair (the weight) in descending order
+  std::sort(weight_UE_index_pair.rbegin(), weight_UE_index_pair.rend());
+
+  // First schedule UL data re-transmissions.
+  for (const auto& item : weight_UE_index_pair) {
     ue& u = *item.second;
-    //++count;
-    //fmt::print("Weight of {}: {}\n\n",count, u.pp_weight);
     const alloc_outcome alloc_result = alloc_ul_ue(u, res_grid, pusch_alloc, true, false, logger);
     if (alloc_result == alloc_outcome::skip_slot) {
       // Grid allocator directed policy to stop allocations for this slot.
-      //skip_slot_flag = true;
       break;
     }
   }
 
-  for (const auto& item : vectorWithTwoItems) {
-    //double_t weight = item.first;
+  // Then, schedule all pending SR.
+  for (const auto& item : weight_UE_index_pair) {
     ue& u = *item.second;
-    //++count;
-    //fmt::print("Weight of {}: {}\n\n",count, u.pp_weight);
     const alloc_outcome alloc_result = alloc_ul_ue(u, res_grid, pusch_alloc, false, true, logger);
     if (alloc_result == alloc_outcome::skip_slot) {
       // Grid allocator directed policy to stop allocations for this slot.
-      //skip_slot_flag = true;
       break;
     }
   }
 
-  for (const auto& item : vectorWithTwoItems) {
-    //double_t weight = item.first;
+  // Finally, schedule UL data new transmissions.
+  for (const auto& item : weight_UE_index_pair) {
     ue& u = *item.second;
-    //++count;
-    //fmt::print("Weight of {}: {}\n\n",count, u.pp_weight);
     const alloc_outcome alloc_result = alloc_ul_ue(u, res_grid, pusch_alloc, false, false, logger);
     if (alloc_result == alloc_outcome::skip_slot) {
       // Grid allocator directed policy to stop allocations for this slot.
-      //skip_slot_flag = true;
       break;
     }
   }
