@@ -1,9 +1,9 @@
 #pragma once
 
 #include "scheduler_time_rr.h"
-#include "../support/config_helpers.h"
-#include "../support/rb_helper.h"
-#include "../ue_scheduling/ue_pdsch_param_candidate_searcher.h"
+#include "lib/scheduler/support/config_helpers.h"
+#include "lib/scheduler/support/rb_helper.h"
+#include "lib/scheduler/ue_scheduling/ue_pdsch_param_candidate_searcher.h"
 
 using namespace srsran;
 
@@ -276,7 +276,7 @@ extern "C" dl_sched(const ue_resource_grid_view& res_grid, const ue_repository& 
   // sort UEs by priority
 
   //TODO: loop over all UEs and run alloc_dl_ue 
-  
+
 }
 
 extern "C" ul_sched(const ue_resource_grid_view& res_grid, const ue_repository& ues) {

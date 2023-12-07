@@ -1,8 +1,6 @@
-#include "scheduler_policy_adapter.h"
+#pragma once
 
-#include "../support/config_helpers.h"
-#include "../support/rb_helper.h"
-#include "../ue_scheduling/ue_pdsch_param_candidate_searcher.h"
+#include "scheduler_policy_adapter.h"
 
 using namespace srsran;
 
@@ -170,7 +168,7 @@ scheduler_policy_adapter::scheduler_policy_adapter() :
   }
 }
 
-void scheduler_policy_adapter::dl_sched(ue_pdsch_allocator&          pdsch_alloc,
+void scheduler_policy_adapter::dl_sched(ue_pdsch_allocator&   pdsch_alloc,
                                  const ue_resource_grid_view& res_grid,
                                  const ue_repository&         ues)
 {
@@ -193,7 +191,7 @@ void scheduler_policy_adapter::dl_sched(ue_pdsch_allocator&          pdsch_alloc
   }
 }
 
-void scheduler_policy_adapter::ul_sched(ue_pusch_allocator&          pusch_alloc,
+void scheduler_policy_adapter::ul_sched(ue_pusch_allocator&   pusch_alloc,
                                  const ue_resource_grid_view& res_grid,
                                  const ue_repository&         ues)
 {
