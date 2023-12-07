@@ -345,6 +345,7 @@ scheduler_time_rr::scheduler_time_rr() :
 {
 }
 
+//TODO: Add slice database to dl_sched.
 void scheduler_time_rr::dl_sched(ue_pdsch_allocator&          pdsch_alloc,
                                  const ue_resource_grid_view& res_grid,
                                  const ue_repository&         ues)
@@ -355,6 +356,8 @@ void scheduler_time_rr::dl_sched(ue_pdsch_allocator&          pdsch_alloc,
   auto retx_ue_function = [this, &res_grid, &pdsch_alloc](const ue& u) {
     return alloc_dl_ue(u, res_grid, pdsch_alloc, true, logger);
   };
+
+  //TODO: loop over slices and run enterprise scheduler for each slice.
 
   // First schedule re-transmissions.
   next_dl_ue_index = round_robin_apply(ues, next_dl_ue_index, retx_ue_function);
