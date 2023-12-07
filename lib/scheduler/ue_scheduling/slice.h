@@ -6,20 +6,19 @@
 #include "ul_logical_channel_manager.h"
 #include "srsran/ran/du_types.h"
 #include "srsran/scheduler/mac_scheduler.h"
+#include "include/srsran/ran/s_nssai.h"
+#include "asn1/f1ap/f1ap_common.h"
 
 namespace srsran {
 
+// Duplicate of include/srsran/asn1/f1ap/f1ap_ies.h:6836 ?
 class slice
 {
 public:
-  // MCC
-  int MCC;
-  // MNC
-  int MNC;
-  // SST
-  int SST;
-  // SD
-  int SD;
+    // PLMNID
+    fixed_octstring<3, true> plmn_id;
+    // NSSAI
+    s_nssai_t nssai;
 };
-    
+        
 } // namespace srsran
