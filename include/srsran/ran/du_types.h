@@ -78,4 +78,13 @@ inline ue_cell_index_t to_ue_cell_index(std::underlying_type_t<ue_cell_index_t> 
 /// is CA-capable.
 enum du_cell_group_index_t : uint16_t { MAX_DU_CELL_GROUPS = du_cell_index_t::MAX_NOF_DU_CELLS };
 
+
+// MAX number of slices
+enum slice_id_t : uint16_t {
+  // MIN_SLICE_ID     = 0,
+  // MAX_SLICE_ID     = 15,
+  MAX_NOF_SLICES   = 16,
+  // INVALID_SLICE_ID = MAX_NOF_SLICES
+};
+
 } // namespace srsran

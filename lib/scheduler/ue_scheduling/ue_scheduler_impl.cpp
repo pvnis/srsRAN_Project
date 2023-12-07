@@ -58,6 +58,8 @@ void ue_scheduler_impl::run_sched_strategy(slot_point slot_tx, du_cell_index_t c
     return;
   }
 
+  //TODO: load slice database
+
   //TODO: call inter-slice scheduler here.
 
   // Perform round-robin prioritization of UL and DL scheduling. This gives unfair preference to DL over UL. This is
@@ -66,7 +68,7 @@ void ue_scheduler_impl::run_sched_strategy(slot_point slot_tx, du_cell_index_t c
   // UCI in PUSCH and UE sending 4 HARQ ACK bits (DAI = 3).
   // Example: K1==K2=4 and PUSCH is allocated before PDSCH.
   if (expert_cfg.enable_csi_rs_pdsch_multiplexing or (*cells[cell_index]->cell_res_alloc)[0].result.dl.csi_rs.empty()) {
-    sched_strategy->dl_sched(ue_alloc, ue_res_grid_view, ue_db); //TODO: Add slice database here.
+    sched_strategy->dl_sched(ue_alloc, ue_res_grid_view, ue_db); //TODO: Add slice database in this function.
   }
   sched_strategy->ul_sched(ue_alloc, ue_res_grid_view, ue_db);
 }
