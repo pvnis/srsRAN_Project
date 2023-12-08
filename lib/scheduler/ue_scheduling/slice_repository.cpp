@@ -6,10 +6,10 @@ using namespace srsran;
 slice_repository load_slices(){
     slice_repository slices;
     // load slices from database
-    slice slice;
-    slice.slice_index = 0;
-    slice.plmn_id = 00101;
-    slice.nssai = {0,0};
+    std::unique_ptr<slice> slice;
+    slice->slice_index = 0;
+    slice->plmn_id = 00101;
+    slice->nssai = {0,0};
     slices.add_slice(slice);
     return slices;
 }

@@ -12,6 +12,9 @@ class slice_repository
   using slice_list = std::array<std::unique_ptr<slice>,MAX_NOF_SLICES>;
 
 public:
+  using iterator       = slice_list::iterator;
+  using const_iterator = slice_list::const_iterator;
+
   /// \brief Add new UE in the UE repository.
   void add_slice(std::unique_ptr<slice> slice);
 
@@ -29,8 +32,8 @@ public:
 
   iterator begin() { return slices.begin(); }
   iterator end() { return slices.end(); }
-  const iterator begin() const { return slices.begin(); }
-  const iterator end() const { return slices.end(); }
+  const_iterator begin() const { return slices.begin(); }
+  const_iterator end() const { return slices.end(); }
 
 private:
   // srslog::basic_logger&         logger;
