@@ -22,6 +22,7 @@
 
 #include "ue_scheduler_impl.h"
 #include "../policy/scheduler_policy_factory.h"
+#include "slice_repository.h"
 
 using namespace srsran;
 
@@ -59,6 +60,7 @@ void ue_scheduler_impl::run_sched_strategy(slot_point slot_tx, du_cell_index_t c
   }
 
   //TODO: load slice database
+  slice_repository slices = load_slices();
 
   //TODO: call inter-slice scheduler here.
 

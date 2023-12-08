@@ -1,18 +1,41 @@
 #pragma once
 
-#include "ue.h"
-#include "srsran/adt/ring_buffer.h"
+#include "slice.h"
+
+#define MAX_NOF_SLICES 16
 
 namespace srsran {
 
 /// Container that stores all scheduler UEs.
 class slice_repository
 {
-  using slice_list = slotted_id_table<du_ue_index_t, std::unique_ptr<slice>, MAX_NOF_SLICES>;
+  using slice_list = std::array<std::unique_ptr<slice>,MAX_NOF_SLICES>;
+
+public:
+  /// \brief Add new UE in the UE repository.
+  void add_slice(std::unique_ptr<slice> slice);
+
+  /// \brief Remove existing slice from the repository.
+  void remove_slice(slice_index index);
+
+  slice*       find(slice_index index) 
+  const slice* find(slice_index index) 
+
+  size_t size() const { return slices.size(); }
+
+  bool empty() const { return slices.empty(); }
+
+  plmn_id_t plmn_id(int MCC, int MNC, int MCC_len) const { return MCC*10**(MNC_len) + MNC; }
+
+  iterator       begin() { return slices.begin(); }
+  iterator       end() { return slices.end(); }
+  const_iterator begin() const { return slices.begin(); }
+  const_iterator end() const { return slices.end(); }
 
 private:
   srslog::basic_logger&         logger;
 
+  slice_list slices;
 };
 
 } // namespace srsran
