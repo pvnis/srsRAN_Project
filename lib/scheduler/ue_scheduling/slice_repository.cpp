@@ -4,7 +4,8 @@ using namespace srsran;
 
 // load slice database
 std::unique_ptr<slice_repository> load_slices(){
-    std::unique_ptr<slice_repository> slices = std::make_unique<slice_repository>();
+    // std::unique_ptr<slice_repository> slices = std::make_unique<slice_repository>();
+    slice_repository slices;
     // load slices from database
     std::unique_ptr<slice> slice = std::make_unique<slice>(001, 01, 2, {0,0}, 0);
     slices.add_slice(slice);
