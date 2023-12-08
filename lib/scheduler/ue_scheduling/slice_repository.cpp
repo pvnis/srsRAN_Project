@@ -6,7 +6,7 @@ using namespace srsran;
 slice_repository load_slices(){
     slice_repository slices;
     // load slices from database
-    std::unique_ptr<slice> slice;
+    std::unique_ptr<slice> slice = std::make_unique<slice>();
     slice->slice_index = 0;
     slice->plmn_id = 00101;
     slice->nssai = {0,0};
