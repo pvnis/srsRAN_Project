@@ -3,13 +3,10 @@
 using namespace srsran;
 
 // load slice database
-slice_repository load_slices(){
-    slice_repository slices;
+std::unique_ptr<slice_repository> load_slices(){
+    std::unique_ptr<slice_repository> slices = std::make_unique<slice_repository>();
     // load slices from database
-    std::unique_ptr<slice> slice = std::make_unique<slice>();
-    slice->slice_index = 0;
-    slice->plmn_id = 00101;
-    slice->nssai = {0,0};
+    std::unique_ptr<slice> slice = std::make_unique<slice>(001, 01, 2, {0,0}, 0);
     slices.add_slice(slice);
     return slices;
 }
@@ -20,7 +17,7 @@ void slice_repository::add_slice(std::unique_ptr<slice> slice){
     int plmn_id = slice->plmn_id;
     s_nssai_t nssai = slice->nssai;
 
-    slice.insert(slice_index, std::move(slice));
+    slices.insert(slice_index, std::move(slice));
 }
 
 void slice_repository::remove_slice(int index){
