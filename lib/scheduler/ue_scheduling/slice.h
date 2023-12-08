@@ -1,7 +1,7 @@
 #pragma once
 
 #include "ue_cell.h"
-#include "include/srsran/ran/s_nssai.h"
+#include "../../../include/srsran/ran/s_nssai.h"
 
 namespace srsran {
 
