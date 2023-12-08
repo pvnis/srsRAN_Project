@@ -16,21 +16,13 @@ slice_repository load_slices(){
 
 void slice_repository::add_slice(std::unique_ptr<slice> slice){
     // Add slice in repository.
-    slice_index = slice->slice_index;
+    int = slice->slice_index;
     int plmn_id = slice->plmn_id;
     s_nssai_t nssai = slice->nssai;
 
     slice.insert(slice_index, std::move(slice));
 }
 
-void slice_repository::remove_slice(slice_index index){
+void slice_repository::remove_slice(int index){
     slices.push(index);
-}
-
-slice* slice_repository::find(slice_index index){
-    // TODO
-}
-
-const slice* slice_repository::find(slice_index index){
-    // TODO
 }

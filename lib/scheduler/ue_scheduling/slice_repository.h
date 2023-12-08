@@ -16,16 +16,13 @@ public:
   void add_slice(std::unique_ptr<slice> slice);
 
   /// \brief Remove existing slice from the repository.
-  void remove_slice(slice_index index);
-
-  slice*       find(slice_index index) 
-  const slice* find(slice_index index) 
+  void remove_slice(int index);
 
   size_t size() const { return slices.size(); }
 
   bool empty() const { return slices.empty(); }
 
-  plmn_id_t plmn_id(int MCC, int MNC, int MCC_len) const { return MCC*10**(MNC_len) + MNC; }
+  int plmn_id(int MCC, int MNC, int MNC_len) const { return MCC*10**(MNC_len) + MNC; }
 
   iterator       begin() { return slices.begin(); }
   iterator       end() { return slices.end(); }
