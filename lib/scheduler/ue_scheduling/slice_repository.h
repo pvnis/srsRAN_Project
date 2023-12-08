@@ -18,6 +18,9 @@ public:
   /// \brief Remove existing slice from the repository.
   void remove_slice(int index);
 
+  // Load slice database
+  slice_repository load_slices();
+
   size_t size() const { return slices.size(); }
 
   bool empty() const { return slices.empty(); }
