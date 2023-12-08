@@ -16,7 +16,7 @@ slice_repository load_slices(){
 
 void slice_repository::add_slice(std::unique_ptr<slice> slice){
     // Add slice in repository.
-    int = slice->slice_index;
+    int slice_index = slice->slice_index;
     int plmn_id = slice->plmn_id;
     s_nssai_t nssai = slice->nssai;
 

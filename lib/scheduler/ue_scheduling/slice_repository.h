@@ -27,10 +27,10 @@ public:
 
   int plmn_id(int MCC, int MNC, int MNC_len) const { return MCC*pow(10,MNC_len) + MNC; }
 
-  slice begin() { return slices.begin(); }
-  slice end() { return slices.end(); }
-  const slice begin() const { return slices.begin(); }
-  const slice end() const { return slices.end(); }
+  iterator begin() { return slices.begin(); }
+  iterator end() { return slices.end(); }
+  const iterator begin() const { return slices.begin(); }
+  const iterator end() const { return slices.end(); }
 
 private:
   // srslog::basic_logger&         logger;
