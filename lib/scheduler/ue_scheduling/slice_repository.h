@@ -22,15 +22,15 @@ public:
 
   bool empty() const { return slices.empty(); }
 
-  int plmn_id(int MCC, int MNC, int MNC_len) const { return MCC*10**(MNC_len) + MNC; }
+  int plmn_id(int MCC, int MNC, int MNC_len) const { return MCC*pow(10,MNC_len) + MNC; }
 
-  iterator       begin() { return slices.begin(); }
-  iterator       end() { return slices.end(); }
-  const_iterator begin() const { return slices.begin(); }
-  const_iterator end() const { return slices.end(); }
+  slice begin() { return slices.begin(); }
+  slice end() { return slices.end(); }
+  const slice begin() const { return slices.begin(); }
+  const slice end() const { return slices.end(); }
 
 private:
-  srslog::basic_logger&         logger;
+  // srslog::basic_logger&         logger;
 
   slice_list slices;
 };
