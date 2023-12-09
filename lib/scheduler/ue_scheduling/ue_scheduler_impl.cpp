@@ -37,6 +37,10 @@ ue_scheduler_impl::ue_scheduler_impl(const scheduler_ue_expert_config& expert_cf
   event_mng(expert_cfg, ue_db, mac_notif, metric_handler, sched_ev_logger),
   logger(srslog::fetch_basic_logger("SCHED"))
 {
+  slices = std::make_unique<slice_repository>();
+
+  //TODO: decide where to load and update slice list
+  slices->load_slices();
 }
 
 void ue_scheduler_impl::add_cell(const ue_scheduler_cell_params& params)
@@ -58,9 +62,6 @@ void ue_scheduler_impl::run_sched_strategy(slot_point slot_tx, du_cell_index_t c
     // only allocates PDCCHs for the current slot_tx.
     return;
   }
-
-  //TODO: load slice database
-  slice_repository slices = load_slices();
 
   //TODO: call inter-slice scheduler here.
 

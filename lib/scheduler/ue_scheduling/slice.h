@@ -9,23 +9,30 @@ namespace srsran {
 class slice
 {
 public:
-    slice(const int MCC_, const int MNC_, const int MNC_len_, const s_nssai_t& nssai_, const int slice_index_) :
-	    MCC(MCC_), MNC(MNC_), MNC_len(MNC_len_), nssai(nssai_), slice_index(slice_index_) {
-    	plmn_id = MCC * pow(10,MNC_len) + MNC;
+    slice(const s_nssai_t& nssai_, const bool ll_, const int latency_slo_nanos_) :
+	    nssai(nssai_), low_latency(ll_), latency_slo_nanos(latency_slo_nanos_) {
     }
 
     slice(const slice&)            = delete;
     slice(slice&&)                 = delete;
 
-    // PLMNID
-    int MCC = 001;
-    int MNC = 01;
-    int MNC_len = 2;
-    int plmn_id;
     // NSSAI
-    s_nssai_t nssai;
+    const s_nssai_t nssai;
     // index
-    int slice_index;
+    const int slice_index;
+
+    enum class slice_type {
+        RESERVED,
+        EMERGENCY,
+        CRITICAL_COMMUNICATION,
+        INTERNET_OF_THINGS,
+        MISSION_CRITICAL_COMMUNICATION,
+        MAX_SLICE_TYPE
+    };
+
+    const bool low_latency;
+    const int latency_slo_nanos;
+
 };
         
 } // namespace srsran

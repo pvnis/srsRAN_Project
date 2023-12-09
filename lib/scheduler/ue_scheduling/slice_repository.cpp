@@ -3,24 +3,21 @@
 using namespace srsran;
 
 // load slice database
-std::unique_ptr<slice_repository> load_slices(){
-    // std::unique_ptr<slice_repository> slices = std::make_unique<slice_repository>();
-    slice_repository slices;
-    // load slices from database
-    std::unique_ptr<slice> slice = std::make_unique<slice>(001, 01, 2, {0,0}, 0);
-    slices.add_slice(slice);
-    return slices;
+void slice_repository::load_slices(){
+    // TODO: load slices from database or copy from gnb app config
+    
+    add_slice(std::make_unique<slice>(001, 01, 2, s_nssai_t{0,0}, 0));
+
+    add_slice(std::make_unique<slice>(001, 02, 2, s_nssai_t{0,1}, 1));
 }
 
-void slice_repository::add_slice(std::unique_ptr<slice> slice){
+void slice_repository::add_slice(std::unique_ptr<slice> s){
     // Add slice in repository.
-    int slice_index = slice->slice_index;
-    int plmn_id = slice->plmn_id;
-    s_nssai_t nssai = slice->nssai;
+    int slice_index = s->slice_index;
 
-    slices.insert(slice_index, std::move(slice));
+    slices.insert(slice_index, std::move(s));
 }
 
 void slice_repository::remove_slice(int index){
-    slices.push(index);
+    slices.erase(index);
 }

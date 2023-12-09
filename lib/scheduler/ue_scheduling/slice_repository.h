@@ -9,20 +9,20 @@ namespace srsran {
 /// Container that stores all scheduler UEs.
 class slice_repository
 {
-  using slice_list = std::array<std::unique_ptr<slice>,MAX_NOF_SLICES>;
+  using slice_list = slotted_id_table<int, std::unique_ptr<slice>, MAX_NOF_SLICES>;
 
 public:
   using iterator       = slice_list::iterator;
   using const_iterator = slice_list::const_iterator;
 
+  // Load slice database
+  void load_slices();
+
   /// \brief Add new UE in the UE repository.
-  void add_slice(std::unique_ptr<slice> slice);
+  void add_slice(std::unique_ptr<slice> s);
 
   /// \brief Remove existing slice from the repository.
   void remove_slice(int index);
-
-  // Load slice database
-  slice_repository load_slices();
 
   size_t size() const { return slices.size(); }
 

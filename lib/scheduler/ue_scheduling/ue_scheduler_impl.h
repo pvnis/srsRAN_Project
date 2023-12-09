@@ -38,6 +38,8 @@
 #include "srsran/scheduler/config/scheduler_expert_config.h"
 #include "srsran/scheduler/config/serving_cell_config_factory.h"
 
+#include "slice_repository.h"
+
 namespace srsran {
 
 /// \brief Interface of data scheduler that is used to allocate UE DL and UL grants in a given slot.
@@ -113,6 +115,8 @@ private:
   slot_sync_point sync_point;
 
   srslog::basic_logger& logger;
+
+  std::unique_ptr<slice_repository> slices;
 };
 
 } // namespace srsran
