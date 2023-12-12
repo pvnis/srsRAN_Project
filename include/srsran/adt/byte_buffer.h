@@ -237,10 +237,6 @@ class byte_buffer
     bool operator==(const control_block_allocator& other) const { return arena == other.arena; }
     bool operator!=(const control_block_allocator& other) const { return !(*this == other); }
 
-public:
-    trace_point created;
-    trace_point enqueued;
-
   private:
     template <typename U>
     friend struct control_block_allocator;
@@ -255,6 +251,11 @@ public:
   using value_type     = uint8_t;
   using iterator       = detail::byte_buffer_segment_list_byte_iterator;
   using const_iterator = detail::byte_buffer_segment_list_byte_const_iterator;
+  using trace_point    = trace_clock::time_point;
+
+  /// Trace points for byte_buffer.
+  trace_point created;
+  trace_point enqueued;
 
   /// Creates an empty byte_buffer.
   byte_buffer() noexcept = default;
