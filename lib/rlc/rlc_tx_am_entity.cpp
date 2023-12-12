@@ -75,6 +75,9 @@ rlc_tx_am_entity::rlc_tx_am_entity(uint32_t                             du_index
 // TS 38.322 v16.2.0 Sec. 5.2.3.1
 void rlc_tx_am_entity::handle_sdu(rlc_sdu sdu)
 {
+  // set time of adding to queue
+  sdu.buf.enqueued = l2_tracer.now();
+  
   size_t sdu_length = sdu.buf.length();
   if (sdu_queue.write(sdu)) {
     logger.log_info(

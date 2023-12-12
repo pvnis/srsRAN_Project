@@ -44,6 +44,9 @@ rlc_tx_tm_entity::rlc_tx_tm_entity(uint32_t                             du_index
 // TS 38.322 v16.2.0 Sec. 5.2.1.1
 void rlc_tx_tm_entity::handle_sdu(rlc_sdu sdu)
 {
+  // set time of adding to queue
+  sdu.buf.enqueued = l2_tracer.now();
+  
   size_t sdu_length = sdu.buf.length();
   if (sdu_queue.write(sdu)) {
     logger.log_info(sdu.buf.begin(), sdu.buf.end(), "TX SDU. sdu_len={} {}", sdu.buf.length(), sdu_queue);
@@ -88,6 +91,9 @@ byte_buffer_chain rlc_tx_tm_entity::pull_pdu(uint32_t grant_len)
     logger.log_warning("Could not read SDU from non-empty queue. grant_len={} {}", grant_len, sdu_queue);
     return {};
   }
+
+  //how much time in queue
+  l2_tracer << trace_event{"buf_enqueued_rlc_tm_tx", sdu.buf.enqueued};
 
   size_t sdu_len = sdu.buf.length();
   srsran_sanity_check(sdu_len == front_len, "Length mismatch. sdu_len={} front_len={}", sdu_len, front_len);

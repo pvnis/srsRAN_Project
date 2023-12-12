@@ -24,6 +24,7 @@
 
 #include "srsran/adt/detail/byte_buffer_range_helpers.h"
 #include "srsran/adt/detail/byte_buffer_segment_pool.h"
+#include "srsran/support/event_tracing.h"
 #include "fmt/format.h"
 #include <vector>
 
@@ -235,6 +236,10 @@ class byte_buffer
 
     bool operator==(const control_block_allocator& other) const { return arena == other.arena; }
     bool operator!=(const control_block_allocator& other) const { return !(*this == other); }
+
+public:
+    trace_point created;
+    trace_point enqueued;
 
   private:
     template <typename U>

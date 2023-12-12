@@ -51,6 +51,9 @@ rlc_tx_um_entity::rlc_tx_um_entity(uint32_t                             du_index
 // TS 38.322 v16.2.0 Sec. 5.2.2.1
 void rlc_tx_um_entity::handle_sdu(rlc_sdu sdu_)
 {
+  // set time of adding to queue
+  sdu.buf.enqueued = l2_tracer.now();
+
   size_t sdu_length = sdu_.buf.length();
   if (sdu_queue.write(sdu_)) {
     logger.log_info(sdu_.buf.begin(),
@@ -105,6 +108,9 @@ byte_buffer_chain rlc_tx_um_entity::pull_pdu(uint32_t grant_len)
       return {};
     }
     logger.log_debug("Read SDU. sn={} pdcp_sn={} sdu_len={}", st.tx_next, sdu.pdcp_sn, sdu.buf.length());
+
+    //how much time in queue
+    l2_tracer << trace_event{"buf_enqueued_rlc_um_tx", sdu.buf.enqueued};
 
     // Notify the upper layer about the beginning of the transfer of the current SDU
     if (sdu.pdcp_sn.has_value()) {

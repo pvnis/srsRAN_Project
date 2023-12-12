@@ -28,6 +28,7 @@
 #include "srsran/psup/psup_packing.h"
 #include "srsran/ran/cu_types.h"
 #include "srsran/support/timers.h"
+#include "srsran/instrumentation/traces/du_traces.h"
 
 namespace srsran {
 
@@ -122,6 +123,10 @@ protected:
     if (!pdu.hdr.flags.seq_number) {
       // Forward this SDU straight away.
       byte_buffer      rx_sdu      = gtpu_extract_t_pdu(std::move(pdu)); // header is invalidated after extraction
+
+      // set timing info
+      rx_sdu.created = l2_tracer.
+
       gtpu_rx_sdu_info rx_sdu_info = {std::move(rx_sdu), pdu_session_info.qos_flow_id};
       deliver_sdu(rx_sdu_info);
       return;
