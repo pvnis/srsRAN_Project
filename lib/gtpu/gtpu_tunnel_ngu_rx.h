@@ -125,7 +125,7 @@ protected:
       byte_buffer      rx_sdu      = gtpu_extract_t_pdu(std::move(pdu)); // header is invalidated after extraction
 
       // set timing info
-      rx_sdu.created = l2_tracer.
+      rx_sdu.created = l2_tracer.now();
 
       gtpu_rx_sdu_info rx_sdu_info = {std::move(rx_sdu), pdu_session_info.qos_flow_id};
       deliver_sdu(rx_sdu_info);
