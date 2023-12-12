@@ -29,6 +29,7 @@
 #include "srsran/ran/cu_types.h"
 #include "srsran/support/timers.h"
 #include "srsran/instrumentation/traces/du_traces.h"
+#include "srsran/adt/byte_buffer.h"
 
 namespace srsran {
 
