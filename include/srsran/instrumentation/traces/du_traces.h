@@ -26,7 +26,7 @@
 
 namespace srsran {
 
-constexpr bool L2_TRACE_ENABLED = false;
+constexpr bool L2_TRACE_ENABLED = true;
 
 /// L2 event tracing. This tracer is used to analyze latencies in the L2 processing of slot indications.
 extern file_event_tracer<L2_TRACE_ENABLED> l2_tracer;
