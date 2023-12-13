@@ -94,7 +94,7 @@ byte_buffer_chain rlc_tx_tm_entity::pull_pdu(uint32_t grant_len)
   }
 
   //how much time in queue
-  //l2_tracer << trace_event{"buf_enqueued_rlc_tm_tx", sdu.buf.enqueued};
+  l2_tracer << trace_event{"buf_enqueued_rlc_tm_tx", sdu.buf.enqueued};
   rlc_queue_time_acc(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - sdu.buf.enqueued).count());
 
   size_t sdu_len = sdu.buf.length();

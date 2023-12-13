@@ -110,7 +110,7 @@ byte_buffer_chain rlc_tx_um_entity::pull_pdu(uint32_t grant_len)
     logger.log_debug("Read SDU. sn={} pdcp_sn={} sdu_len={}", st.tx_next, sdu.pdcp_sn, sdu.buf.length());
 
     //how much time in queue
-    //l2_tracer << trace_event{"buf_enqueued_rlc_um_tx", sdu.buf.enqueued};
+    l2_tracer << trace_event{"buf_enqueued_rlc_um_tx", sdu.buf.enqueued};
     rlc_queue_time_acc(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - sdu.buf.enqueued).count());
 
     // Notify the upper layer about the beginning of the transfer of the current SDU
