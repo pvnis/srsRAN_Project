@@ -24,11 +24,26 @@
 
 #include "srsran/support/event_tracing.h"
 
+#include <boost/accumulators/accumulators.hpp>
+#include <boost/accumulators/statistics/stats.hpp>
+#include <boost/accumulators/statistics/mean.hpp>
+#include <boost/accumulators/statistics/median.hpp>
+#include <boost/accumulators/statistics/tail_quantile.hpp>
+#include <boost/accumulators/statistics/p_square_quantile.hpp>
+#include <boost/accumulators/statistics.hpp>
+
 namespace srsran {
 
 constexpr bool L2_TRACE_ENABLED = false;
 
 /// L2 event tracing. This tracer is used to analyze latencies in the L2 processing of slot indications.
 extern file_event_tracer<L2_TRACE_ENABLED> l2_tracer;
+
+namespace ba = boost::accumulators;
+namespace bat = boost::accumulators::tag;
+
+using accumulator_t = ba::accumulator_set<double, ba::stats<bat::extended_p_square_quantile>>;
+
+extern accumulator_t rlc_queue_time_acc;
 
 } // namespace srsran

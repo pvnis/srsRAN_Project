@@ -26,6 +26,7 @@
 #include "srsran/ran/bs_channel_bandwidth.h"
 #include "srsran/support/build_info/build_info.h"
 #include "srsran/support/io/io_broker.h"
+#include "srsran/instrumentation/traces/du_traces.h"
 #include <fcntl.h>
 #include <list>
 #include <signal.h>
@@ -143,4 +144,11 @@ void gnb_console_helper::on_app_running()
 void gnb_console_helper::on_app_stopping()
 {
   fmt::print("Stopping ..\n");
+
+  fmt::print("Buffer RLC queueing statstics: 25th quantile {} ns, 50th quantile {} ns, 75th quantile {} ns, 99th quantile {} ns\n",
+              ba::quantile(rlc_queue_time_acc, ba::quantile_probability = 0.25),
+              ba::quantile(rlc_queue_time_acc, ba::quantile_probability = 0.50),
+              ba::quantile(rlc_queue_time_acc, ba::quantile_probability = 0.75),
+              ba::quantile(rlc_queue_time_acc, ba::quantile_probability = 0.99)
+              );
 }

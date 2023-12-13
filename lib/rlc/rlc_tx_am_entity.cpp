@@ -201,6 +201,9 @@ byte_buffer_chain rlc_tx_am_entity::build_new_pdu(uint32_t grant_len)
   }
   logger.log_debug("Read SDU. sn={} pdcp_sn={} sdu_len={}", st.tx_next, sdu.pdcp_sn, sdu.buf.length());
 
+  // how much time in queue
+  rlc_queue_time_acc(std::chrono::duration_cast<std::chrono::microseconds>(l2_tracer.now() - sdu.buf.enqueued).count());
+
   // insert newly assigned SN into window and use reference for in-place operations
   // NOTE: from now on, we can't return from this function anymore before increasing tx_next
   rlc_tx_am_sdu_info& sdu_info = tx_window->add_sn(st.tx_next);

@@ -177,6 +177,9 @@ endif()
 # Find dependencies
 ########################################################################
 
+# Boost
+find_package(Boost REQUIRED)
+
 # Backward-cpp
 find_package(Backward)
 if(Backward_FOUND)
