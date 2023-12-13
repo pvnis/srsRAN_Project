@@ -145,7 +145,7 @@ void gnb_console_helper::on_app_stopping()
 {
   fmt::print("Stopping ..\n");
 
-  fmt::print("Buffer RLC queueing statstics: 25th quantile {} ns, 50th quantile {} ns, 75th quantile {} ns, 99th quantile {} ns\n",
+  fmt::print("Buffer RLC queueing statstics: 25th quantile {} ms, 50th quantile {} ms, 75th quantile {} ms, 99th quantile {} ms\n",
               ba::quantile(rlc_queue_time_acc, ba::quantile_probability = 0.25),
               ba::quantile(rlc_queue_time_acc, ba::quantile_probability = 0.50),
               ba::quantile(rlc_queue_time_acc, ba::quantile_probability = 0.75),
