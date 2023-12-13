@@ -25,6 +25,7 @@
 #include "rlc_sdu_queue.h"
 #include "rlc_tx_entity.h"
 #include "srsran/support/executors/task_executor.h"
+#include "srsran/instrumentation/traces/du_traces.h"
 
 namespace srsran {
 
