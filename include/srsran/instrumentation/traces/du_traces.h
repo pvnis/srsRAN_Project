@@ -42,7 +42,7 @@ extern file_event_tracer<L2_TRACE_ENABLED> l2_tracer;
 namespace ba = boost::accumulators;
 namespace bat = boost::accumulators::tag;
 
-using accumulator_t = ba::accumulator_set<double, ba::stats<bat::extended_p_square_quantile>>;
+using accumulator_t = ba::accumulator_set<long long, ba::stats<bat::extended_p_square_quantile>>;
 
 extern accumulator_t rlc_queue_time_acc;
 
