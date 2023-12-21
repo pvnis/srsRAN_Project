@@ -36,3 +36,5 @@ srsran::accumulator_t srsran::pdsch_processor_impl_process_acc(ba::extended_p_sq
 srsran::accumulator_t srsran::pdsch_processor_impl_dmrs_acc(ba::extended_p_square_probabilities = probs);
 
 srsran::accumulator_t srsran::dl_processor_baseband_impl_process_acc(ba::extended_p_square_probabilities = probs);
+
+srsran::accumulator_t srsran::mac_cell_processor_handle_slot_indication_impl_acc(ba::extended_p_square_probabilities = probs);

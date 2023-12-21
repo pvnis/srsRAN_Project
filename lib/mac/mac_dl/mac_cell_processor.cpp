@@ -154,6 +154,8 @@ void mac_cell_processor::handle_slot_indication_impl(slot_point sl_tx)
       phy_cell.on_new_downlink_data(data_res);
 
       l2_tracer << trace_event{"mac_tx_data_req", tx_data_req_tp};
+
+      mac_cell_processor_handle_slot_indication_impl_acc(std::chrono::duration_cast<std::chrono::microseconds>(l2_tracer.now() - tx_data_req_tp).count());
     }
   }
 

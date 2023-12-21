@@ -193,4 +193,12 @@ void gnb_console_helper::on_app_stopping()
               ba::count(dl_processor_baseband_impl_process_acc)
               );
   
+  fmt::print("Mac cell processor handle slot indication impl acc statstics>: 25th quantile {} us, 50th quantile {} us, 75th quantile {} us, 99th quantile {} us, 100th quantile {} us, count {}\n",
+              ba::quantile(mac_cell_processor_handle_slot_indication_impl_acc, ba::quantile_probability = 0.25),
+              ba::quantile(mac_cell_processor_handle_slot_indication_impl_acc, ba::quantile_probability = 0.50),
+              ba::quantile(mac_cell_processor_handle_slot_indication_impl_acc, ba::quantile_probability = 0.75),
+              ba::quantile(mac_cell_processor_handle_slot_indication_impl_acc, ba::quantile_probability = 0.99),
+              ba::quantile(mac_cell_processor_handle_slot_indication_impl_acc, ba::quantile_probability = 1.00),
+              ba::count(mac_cell_processor_handle_slot_indication_impl_acc)
+              );
 }

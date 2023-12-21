@@ -55,4 +55,6 @@ extern accumulator_t pdsch_processor_impl_dmrs_acc;
 
 extern accumulator_t dl_processor_baseband_impl_process_acc;
 
+extern accumulator_t mac_cell_processor_handle_slot_indication_impl_acc;
+
 } // namespace srsran
