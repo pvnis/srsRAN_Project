@@ -46,7 +46,7 @@ rlc_tx_tm_entity::rlc_tx_tm_entity(uint32_t                             du_index
 void rlc_tx_tm_entity::handle_sdu(rlc_sdu sdu)
 {
   // set time of adding to queue
-  sdu.buf.enqueued = std::chrono::steady_clock::now();
+  sdu.enqueued = std::chrono::steady_clock::now();
   
   size_t sdu_length = sdu.buf.length();
   if (sdu_queue.write(sdu)) {
@@ -94,8 +94,8 @@ byte_buffer_chain rlc_tx_tm_entity::pull_pdu(uint32_t grant_len)
   }
 
   //how much time in queue
-  l2_tracer << trace_event{"buf_enqueued_rlc_tm_tx", sdu.buf.enqueued};
-  rlc_queue_time_acc(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - sdu.buf.enqueued).count());
+  l2_tracer << trace_event{"buf_enqueued_rlc_tm_tx", sdu.enqueued};
+  rlc_queue_time_acc(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - sdu.enqueued).count());
 
   size_t sdu_len = sdu.buf.length();
   srsran_sanity_check(sdu_len == front_len, "Length mismatch. sdu_len={} front_len={}", sdu_len, front_len);

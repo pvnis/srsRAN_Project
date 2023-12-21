@@ -26,6 +26,7 @@
 #include "srsran/phy/upper/tx_buffer.h"
 #include "srsran/phy/upper/unique_tx_buffer.h"
 #include "srsran/ran/dmrs.h"
+#include "srsran/instrumentation/traces/du_traces.h"
 
 using namespace srsran;
 
@@ -191,6 +192,8 @@ void pdsch_processor_lite_impl::process(resource_grid_mapper&                   
                                         static_vector<span<const uint8_t>, MAX_NOF_TRANSPORT_BLOCKS> data,
                                         const pdu_t&                                                 pdu)
 {
+  trace_point t = trace_clock::now();
+
   pdsch_processor_validator_impl::assert_pdu(pdu);
 
   // Configure new transmission.
@@ -251,6 +254,9 @@ void pdsch_processor_lite_impl::process(resource_grid_mapper&                   
 
   // Notify the end of the processing.
   notifier.on_finish_processing();
+
+  l2_tracer << trace_event{"pdsch_processor_lite_impl_process_acc", t};
+  pdsch_processor_impl_process_acc(std::chrono::duration_cast<std::chrono::microseconds>(trace_clock::now() - t).count());
 }
 
 void pdsch_processor_lite_impl::process_dmrs(resource_grid_mapper& mapper, const pdu_t& pdu)

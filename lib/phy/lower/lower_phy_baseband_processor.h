@@ -205,6 +205,7 @@ private:
   std::mutex                                                            last_rx_mutex;
   std::condition_variable                                               last_rx_cvar;
   optional<std::chrono::time_point<std::chrono::high_resolution_clock>> last_tx_time;
+  srslog::basic_logger& logger;
 };
 
 } // namespace srsran

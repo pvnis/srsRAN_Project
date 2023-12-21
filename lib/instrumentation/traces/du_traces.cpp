@@ -27,3 +27,12 @@ srsran::file_event_tracer<srsran::L2_TRACE_ENABLED> srsran::l2_tracer;
 boost::array<double, 10> probs = {0.10, 0.25, 0.50, 0.75, 0.90, 0.95, 0.98, 0.99, 0.995, 1.00};
 
 srsran::accumulator_t srsran::rlc_queue_time_acc(ba::extended_p_square_probabilities = probs);
+srsran::accumulator_t srsran::byte_buffer_lifetime_acc(ba::extended_p_square_probabilities = probs);
+
+srsran::accumulator_t srsran::mac_cell_processor_assemble_acc(ba::extended_p_square_probabilities = probs);
+srsran::accumulator_t srsran::mac_cell_processor_assemble_send_acc(ba::extended_p_square_probabilities = probs);
+
+srsran::accumulator_t srsran::pdsch_processor_impl_process_acc(ba::extended_p_square_probabilities = probs);
+srsran::accumulator_t srsran::pdsch_processor_impl_dmrs_acc(ba::extended_p_square_probabilities = probs);
+
+srsran::accumulator_t srsran::dl_processor_baseband_impl_process_acc(ba::extended_p_square_probabilities = probs);

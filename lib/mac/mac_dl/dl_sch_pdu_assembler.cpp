@@ -25,6 +25,7 @@
 #include "srsran/ran/pdsch/pdsch_constants.h"
 #include "srsran/support/error_handling.h"
 #include "srsran/support/format_utils.h"
+#include "srsran/instrumentation/traces/du_traces.h"
 
 using namespace srsran;
 
@@ -51,6 +52,7 @@ unsigned dl_sch_pdu::add_sdu(lcid_t lcid_, byte_buffer_chain&& sdu)
 
   // Encode Payload.
   for (const byte_buffer_slice& sl : sdu.slices()) {
+    byte_buffer_lifetime_acc(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - sl.getCreated()).count());
     for (const span<const uint8_t> seg : sl.segments()) {
       std::copy(seg.begin(), seg.end(), pdu.data() + byte_offset);
       byte_offset += seg.size();

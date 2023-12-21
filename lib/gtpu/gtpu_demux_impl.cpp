@@ -23,6 +23,7 @@
 #include "gtpu_demux_impl.h"
 #include "gtpu_pdu.h"
 #include <sys/socket.h>
+#include "srsran/support/unique_thread.h"
 
 using namespace srsran;
 
@@ -71,6 +72,8 @@ void gtpu_demux_impl::handle_pdu(byte_buffer pdu, const sockaddr_storage& src_ad
 
 void gtpu_demux_impl::handle_pdu_impl(gtpu_teid_t teid, byte_buffer pdu, const sockaddr_storage& src_addr)
 {
+  logger.info("Byte buffer being handled on thread={} at time={}", this_thread_name(), std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count()); 
+
   if (gtpu_pcap.is_write_enabled()) {
     gtpu_pcap.push_pdu(pdu.deep_copy());
   }

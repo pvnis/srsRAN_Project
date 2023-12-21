@@ -27,6 +27,7 @@
 #include "srsran/adt/optional.h"
 #include "srsran/ran/du_types.h"
 #include "srsran/ran/lcid.h"
+#include "srsran/support/event_tracing.h"
 
 /*
  * This file will hold the interfaces and notifiers for the RLC entity.
@@ -58,6 +59,7 @@ namespace srsran {
 struct rlc_sdu {
   byte_buffer        buf = {};
   optional<uint32_t> pdcp_sn;
+  trace_point enqueued;
   rlc_sdu() = default;
   rlc_sdu(byte_buffer buf_, optional<uint32_t> pdcp_sn_) : buf(std::move(buf_)), pdcp_sn(pdcp_sn_) {}
 };

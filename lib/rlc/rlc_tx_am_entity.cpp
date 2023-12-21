@@ -27,6 +27,7 @@
 #include "srsran/ran/pdsch/pdsch_constants.h"
 #include "srsran/support/event_tracing.h"
 #include "srsran/support/srsran_assert.h"
+#include "srsran/support/unique_thread.h"
 #include <set>
 
 using namespace srsran;
@@ -76,8 +77,10 @@ rlc_tx_am_entity::rlc_tx_am_entity(uint32_t                             du_index
 void rlc_tx_am_entity::handle_sdu(rlc_sdu sdu)
 {
   // set time of adding to queue
-  sdu.buf.enqueued = std::chrono::steady_clock::now();
-  
+  sdu.enqueued = std::chrono::steady_clock::now();
+ 
+  logger.log_info("SDU enqueued on thread={} at time={}", this_thread_name(), std::chrono::duration_cast<std::chrono::microseconds>(sdu.enqueued.time_since_epoch()).count());
+
   size_t sdu_length = sdu.buf.length();
   if (sdu_queue.write(sdu)) {
     logger.log_info(
@@ -201,9 +204,13 @@ byte_buffer_chain rlc_tx_am_entity::build_new_pdu(uint32_t grant_len)
   }
   logger.log_debug("Read SDU. sn={} pdcp_sn={} sdu_len={}", st.tx_next, sdu.pdcp_sn, sdu.buf.length());
 
+  logger.log_info("SDU denqueued on thread={} at time={}", this_thread_name(), std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count()); 
+  
+  logger.log_info("SDU queue time={}", std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - sdu.enqueued).count());
+
   // how much time in queue
-  l2_tracer << trace_event{"buf_enqueued_rlc_um_tx", sdu.buf.enqueued};
-  rlc_queue_time_acc(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - sdu.buf.enqueued).count());
+  l2_tracer << trace_event{"buf_enqueued_rlc_am_tx", sdu.enqueued};
+  rlc_queue_time_acc(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - sdu.enqueued).count());
 
   // insert newly assigned SN into window and use reference for in-place operations
   // NOTE: from now on, we can't return from this function anymore before increasing tx_next

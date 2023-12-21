@@ -255,7 +255,6 @@ public:
 
   /// Trace points for byte_buffer.
   trace_point created;
-  trace_point enqueued;
 
   /// Creates an empty byte_buffer.
   byte_buffer() noexcept = default;
@@ -952,6 +951,10 @@ public:
   friend bool operator!=(const T& r, const byte_buffer_slice& rhs)
   {
     return not(rhs == r);
+  }
+
+  const trace_point& getCreated() const {
+    return buf.created;
   }
 
 private:

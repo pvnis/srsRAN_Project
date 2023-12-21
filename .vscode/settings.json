@@ -1,0 +1,10 @@
+{
+    "cmake.configureOnOpen": false,
+    "files.associations": {
+        "chrono": "cpp",
+        "atomic": "cpp",
+        "utility": "cpp",
+        "condition_variable": "cpp",
+        "variant": "cpp"
+    }
+}

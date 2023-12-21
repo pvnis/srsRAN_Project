@@ -24,6 +24,7 @@
 #include "srsran/gateways/baseband/buffer/baseband_gateway_buffer_writer_view.h"
 #include "srsran/phy/lower/lower_phy_timing_context.h"
 #include "srsran/srsvec/zero.h"
+#include "srsran/instrumentation/traces/du_traces.h"
 
 using namespace srsran;
 
@@ -112,6 +113,8 @@ static void fill_zeros(baseband_gateway_buffer_writer& buffer, const baseband_ga
 baseband_gateway_transmitter_metadata downlink_processor_baseband_impl::process(baseband_gateway_buffer_writer& buffer,
                                                                                 baseband_gateway_timestamp timestamp)
 {
+  trace_point t = trace_clock::now();
+  
   srsran_assert(nof_rx_ports == buffer.get_nof_channels(), "Invalid number of channels.");
   unsigned nof_output_samples = buffer.get_nof_samples();
 
@@ -216,6 +219,9 @@ baseband_gateway_transmitter_metadata downlink_processor_baseband_impl::process(
   // Fill the unprocessed regions of the buffer with zeros.
   fill_zeros(buffer, md);
 
+  dl_processor_baseband_impl_process_acc(std::chrono::duration_cast<std::chrono::microseconds>(trace_clock::now() - t).count());
+  l2_tracer << trace_event{"dl_processor_baseband_impl_process", t};
+  
   return md;
 }
 

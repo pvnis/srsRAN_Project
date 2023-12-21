@@ -32,6 +32,7 @@
 #include <unistd.h>
 
 #include <utility>
+#include "srsran/support/unique_thread.h"
 
 using namespace srsran;
 
@@ -217,6 +218,9 @@ void udp_network_gateway_impl::receive()
   for (int i = 0; i < rx_msgs; ++i) {
     span<uint8_t> payload(rx_mem[i].data(), rx_msghdr[i].msg_len);
     byte_buffer   pdu = {};
+    pdu.created = std::chrono::steady_clock::now();
+    logger.info("Byte buffer created on thread={} at time={}", this_thread_name(), std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count()); 
+
     if (pdu.append(payload)) {
       logger.debug("Received {} bytes on UDP socket", rx_msghdr[i].msg_len);
       data_notifier.on_new_pdu(std::move(pdu), *(sockaddr_storage*)rx_msghdr[i].msg_hdr.msg_name);

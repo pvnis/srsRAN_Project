@@ -22,6 +22,7 @@
 
 #include "lower_phy_baseband_processor.h"
 #include "srsran/adt/interval.h"
+#include "srsran/instrumentation/traces/du_traces.h"
 
 using namespace srsran;
 
@@ -42,7 +43,8 @@ lower_phy_baseband_processor::lower_phy_baseband_processor(const lower_phy_baseb
   rx_buffers(config.nof_rx_buffers),
   tx_buffers(config.nof_tx_buffers),
   tx_time_offset(config.tx_time_offset),
-  rx_to_tx_max_delay(config.rx_to_tx_max_delay)
+  rx_to_tx_max_delay(config.rx_to_tx_max_delay),
+  logger(srslog::fetch_basic_logger("PHY"))
 {
   static constexpr interval<float> system_time_throttling_range(0, 1);
 
@@ -97,6 +99,8 @@ void lower_phy_baseband_processor::stop()
 
 void lower_phy_baseband_processor::dl_process(baseband_gateway_timestamp timestamp)
 {
+  logger.info("lower_phy_baseband_processor::dl_process timestamp {}", timestamp);
+
   // Check if it is running, notify stop and return without enqueueing more tasks.
   if (!tx_state.is_running()) {
     tx_state.notify_stop();
@@ -105,6 +109,8 @@ void lower_phy_baseband_processor::dl_process(baseband_gateway_timestamp timesta
 
   // Get transmit baseband buffer. It blocks if all the buffers are enqueued for transmission.
   std::unique_ptr<baseband_gateway_buffer_dynamic> dl_buffer = tx_buffers.pop_blocking();
+
+  trace_point t = trace_clock::now();
 
   // Throttling mechanism to keep a maximum latency of one millisecond in the transmit buffer based on the latest
   // received timestamp.
@@ -115,6 +121,8 @@ void lower_phy_baseband_processor::dl_process(baseband_gateway_timestamp timesta
       return (timestamp < last_rx_timestamp + rx_to_tx_max_delay) || !tx_state.is_running();
     });
   }
+
+  l2_tracer << trace_event{"dl_process_sleep", t};
 
   // Throttling mechanism to slow down the baseband processing.
   if ((cpu_throttling_time.count() > 0) && (last_tx_time.has_value())) {
@@ -168,6 +176,8 @@ void lower_phy_baseband_processor::ul_process()
     last_rx_timestamp = rx_metadata.ts + rx_buffer->get_nof_samples();
     last_rx_cvar.notify_all();
   }
+
+  logger.info("lower_phy_baseband_processor::ul_process last_rx_timestamp {}", last_rx_timestamp);
 
   // Queue uplink buffer processing.
   report_fatal_error_if_not(uplink_executor.execute([this, ul_buffer = std::move(rx_buffer), rx_metadata]() mutable {

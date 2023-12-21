@@ -45,5 +45,14 @@ namespace bat = boost::accumulators::tag;
 using accumulator_t = ba::accumulator_set<long long, ba::stats<bat::extended_p_square_quantile>>;
 
 extern accumulator_t rlc_queue_time_acc;
+extern accumulator_t byte_buffer_lifetime_acc;
+
+extern accumulator_t mac_cell_processor_assemble_acc;
+extern accumulator_t mac_cell_processor_assemble_send_acc;
+
+extern accumulator_t pdsch_processor_impl_process_acc;
+extern accumulator_t pdsch_processor_impl_dmrs_acc;
+
+extern accumulator_t dl_processor_baseband_impl_process_acc;
 
 } // namespace srsran

@@ -26,6 +26,8 @@
 #include "srsran/phy/upper/tx_buffer.h"
 #include "srsran/phy/upper/unique_tx_buffer.h"
 
+#include "srsran/instrumentation/traces/du_traces.h"
+
 using namespace srsran;
 
 void pdsch_processor_concurrent_impl::process(resource_grid_mapper&                                        mapper_,
@@ -34,6 +36,8 @@ void pdsch_processor_concurrent_impl::process(resource_grid_mapper&             
                                               static_vector<span<const uint8_t>, MAX_NOF_TRANSPORT_BLOCKS> data_,
                                               const pdsch_processor::pdu_t&                                pdu_)
 {
+  trace_point t = trace_clock::now();
+
   // Saves inputs.
   save_inputs(mapper_, std::move(softbuffer_), notifier_, data_, pdu_);
 
@@ -51,6 +55,8 @@ void pdsch_processor_concurrent_impl::process(resource_grid_mapper&             
 
   // Fork codeblock processing tasks.
   fork_cb_batches();
+
+  pdsch_processor_impl_process_acc(std::chrono::duration_cast<std::chrono::microseconds>(trace_clock::now() - t).count());
 }
 
 void pdsch_processor_concurrent_impl::save_inputs(resource_grid_mapper&     mapper_,
@@ -346,6 +352,8 @@ void pdsch_processor_concurrent_impl::fork_cb_batches()
 
 void pdsch_processor_concurrent_impl::process_dmrs()
 {
+  trace_point t = trace_clock::now();
+
   bounded_bitset<MAX_RB> rb_mask_bitset = config.freq_alloc.get_prb_mask(config.bwp_start_rb, config.bwp_size_rb);
 
   // Select the DM-RS reference point.
@@ -374,4 +382,6 @@ void pdsch_processor_concurrent_impl::process_dmrs()
     // Notify end of the processing.
     notifier->on_finish_processing();
   }
+
+  pdsch_processor_impl_dmrs_acc(std::chrono::duration_cast<std::chrono::microseconds>(trace_clock::now() - t).count());
 }
