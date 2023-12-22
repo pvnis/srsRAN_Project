@@ -101,6 +101,8 @@ void pdcp_entity_tx::handle_sdu(byte_buffer sdu)
   }
   byte_buffer protected_buf = std::move(exp_buf.value());
 
+  protected_buf.created=sdu.created;
+
   // Create a discard timer and put into tx_window. For AM, also store the SDU for a possible data recovery procedure.
   if (cfg.discard_timer.has_value()) {
     unique_timer discard_timer = {};

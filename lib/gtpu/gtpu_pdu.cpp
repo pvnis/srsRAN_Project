@@ -22,6 +22,7 @@
 #include "gtpu_pdu.h"
 #include "gtpu_tunnel_logger.h"
 #include "srsran/support/bit_encoding.h"
+#include "srsran/support/unique_thread.h"
 
 namespace srsran {
 
@@ -153,6 +154,11 @@ bool gtpu_dissect_pdu(gtpu_dissected_pdu& dissected_pdu, byte_buffer raw_pdu, gt
   }
 
   dissected_pdu.buf = std::move(raw_pdu);
+  // Print here
+  logger.log_info("Byte buffer handled on gtpu_dissect_pdu on thread={} with value dissected_pdu.buf created at={} and now={}", this_thread_name(),
+		  std::chrono::duration_cast<std::chrono::microseconds>(dissected_pdu.buf.created.time_since_epoch()).count(),
+        std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count());
+
   bit_decoder decoder{dissected_pdu.buf};
 
   // Flags

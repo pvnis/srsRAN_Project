@@ -27,6 +27,7 @@
 #include "srsran/adt/byte_buffer.h"
 #include "srsran/gtpu/gtpu_tunnel_rx.h"
 #include <cstdint>
+#include "srsran/support/unique_thread.h"
 
 namespace srsran {
 
@@ -43,6 +44,11 @@ public:
   void handle_pdu(byte_buffer buf, const sockaddr_storage& src_addr) final
   {
     gtpu_dissected_pdu dissected_pdu;
+    // Print here
+    logger.log_info("gptu_tunnel_base_rx: handle_pdu Byte buffer being handled on thread={} at time={} and now={}", this_thread_name(),
+        std::chrono::duration_cast<std::chrono::microseconds>(buf.created.time_since_epoch()).count(),
+        std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count()); 
+
     bool               read_ok = gtpu_dissect_pdu(dissected_pdu, std::move(buf), logger);
     if (!read_ok) {
       logger.log_error("Dropped PDU, error reading GTP-U header. pdu_len={}", dissected_pdu.buf.length());

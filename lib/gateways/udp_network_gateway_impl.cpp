@@ -219,7 +219,9 @@ void udp_network_gateway_impl::receive()
     span<uint8_t> payload(rx_mem[i].data(), rx_msghdr[i].msg_len);
     byte_buffer   pdu = {};
     pdu.created = std::chrono::steady_clock::now();
-    logger.info("Byte buffer created on thread={} at time={}", this_thread_name(), std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count()); 
+    logger.info("Byte buffer created on thread={} at time={} and now={}", this_thread_name(), 
+        std::chrono::duration_cast<std::chrono::microseconds>(pdu.created.time_since_epoch()).count(),
+        std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count()); 
 
     if (pdu.append(payload)) {
       logger.debug("Received {} bytes on UDP socket", rx_msghdr[i].msg_len);

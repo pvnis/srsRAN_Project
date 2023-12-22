@@ -50,7 +50,9 @@ public:
   void handle_sdu(byte_buffer sdu)
   {
     // pass through
-    logger.log_debug("TX PDU. {} pdu_len={}", qfi, sdu.length());
+    logger.log_info("TX PDU. {} pdu_len={} created={} and now={}", qfi, sdu.length(),
+		    std::chrono::duration_cast<std::chrono::microseconds>(sdu.created.time_since_epoch()).count(),
+        std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count());
     pdu_notifier.on_new_pdu(std::move(sdu));
     ue_inactivity_timer.run();
   }

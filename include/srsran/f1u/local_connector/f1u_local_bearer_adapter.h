@@ -59,7 +59,9 @@ public:
       logger.log_info("Cannot handle NR-U DL message: DU handler not attached.");
       return;
     }
-    logger.log_debug("Passing PDU to DU handler. {}", dl_tnl_info);
+    logger.log_debug("Passing PDU created at={} to DU handler. {}", 
+	            std::chrono::duration_cast<std::chrono::microseconds>(msg.t_pdu.created.time_since_epoch()).count(),
+		    dl_tnl_info);
     handler->handle_pdu(std::move(msg));
   };
 

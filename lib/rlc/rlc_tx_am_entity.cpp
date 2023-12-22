@@ -79,7 +79,10 @@ void rlc_tx_am_entity::handle_sdu(rlc_sdu sdu)
   // set time of adding to queue
   sdu.enqueued = std::chrono::steady_clock::now();
  
-  logger.log_info("SDU enqueued on thread={} at time={}", this_thread_name(), std::chrono::duration_cast<std::chrono::microseconds>(sdu.enqueued.time_since_epoch()).count());
+  logger.log_info("SDU enqueued on thread={} created at={} at time={}", this_thread_name(),
+		          std::chrono::duration_cast<std::chrono::microseconds>(sdu.buf.created.time_since_epoch()).count(),
+
+		  std::chrono::duration_cast<std::chrono::microseconds>(sdu.enqueued.time_since_epoch()).count());
 
   size_t sdu_length = sdu.buf.length();
   if (sdu_queue.write(sdu)) {
@@ -202,11 +205,17 @@ byte_buffer_chain rlc_tx_am_entity::build_new_pdu(uint32_t grant_len)
     logger.log_debug("SDU queue empty. grant_len={}", grant_len);
     return {};
   }
-  logger.log_debug("Read SDU. sn={} pdcp_sn={} sdu_len={}", st.tx_next, sdu.pdcp_sn, sdu.buf.length());
+  logger.log_debug("Read SDU created at={} sn={} pdcp_sn={} sdu_len={}", 
+		  std::chrono::duration_cast<std::chrono::microseconds>(sdu.buf.created.time_since_epoch()).count(),
+		  st.tx_next, sdu.pdcp_sn, sdu.buf.length());
 
-  logger.log_info("SDU denqueued on thread={} at time={}", this_thread_name(), std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count()); 
+  logger.log_info("SDU dequeued on thread={} at time={}", this_thread_name(), std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count()); 
   
   logger.log_info("SDU queue time={}", std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - sdu.enqueued).count());
+  
+  logger.log_info("SDU buffer lifetime={}", std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - sdu.buf.created).count());
+
+  byte_buffer_lifetime_acc(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - sdu.buf.created).count());
 
   // how much time in queue
   l2_tracer << trace_event{"buf_enqueued_rlc_am_tx", sdu.enqueued};
