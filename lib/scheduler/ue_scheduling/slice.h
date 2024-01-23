@@ -10,7 +10,8 @@ class slice
 {
 public:
     slice(const s_nssai_t& nssai_, const bool ll_, const int latency_slo_nanos_) :
-	    nssai(nssai_), low_latency(ll_), latency_slo_nanos(latency_slo_nanos_) {
+	    nssai(nssai_), low_latency(ll_), latency_slo_nanos(latency_slo_nanos_),
+        sched_strategy(create_scheduler_strategy(scheduler_strategy_params{"time_rr", &srslog::fetch_basic_logger("SCHED")})) {
     }
 
     slice(const slice&)            = delete;
@@ -33,6 +34,7 @@ public:
     const bool low_latency;
     const int latency_slo_nanos;
 
+    std::unique_ptr<scheduler_policy> sched_strategy;
 };
         
 } // namespace srsran

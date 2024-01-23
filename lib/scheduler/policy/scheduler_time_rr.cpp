@@ -45,11 +45,17 @@ du_ue_index_t round_robin_apply(const ue_repository& ue_db, du_ue_index_t next_u
       // wrap-around
       it = ue_db.begin();
     }
+
     const ue&           u            = **it;
     const alloc_outcome alloc_result = alloc_ue(u);
     if (alloc_result == alloc_outcome::skip_slot) {
       // Grid allocator directed policy to stop allocations for this slot.
       break;
+    }
+
+    if (ue->get_slice_id() != slice_id) {
+      // UE belongs to a different slice.
+      continue;
     }
 
     if (alloc_result == alloc_outcome::success and first_alloc) {

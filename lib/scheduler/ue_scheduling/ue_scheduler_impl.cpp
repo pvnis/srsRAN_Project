@@ -31,7 +31,6 @@ ue_scheduler_impl::ue_scheduler_impl(const scheduler_ue_expert_config& expert_cf
                                      scheduler_metrics_handler&        metric_handler,
                                      scheduler_event_logger&           sched_ev_logger) :
   expert_cfg(expert_cfg_),
-  sched_strategy(create_scheduler_strategy(scheduler_strategy_params{"time_rr", &srslog::fetch_basic_logger("SCHED")})),
   ue_alloc(expert_cfg, ue_db, srslog::fetch_basic_logger("SCHED")),
   event_mng(ue_db, metric_handler, sched_ev_logger),
   logger(srslog::fetch_basic_logger("SCHED"))
@@ -62,7 +61,8 @@ void ue_scheduler_impl::run_sched_strategy(slot_point slot_tx, du_cell_index_t c
     return;
   }
 
-  //TODO: call inter-slice scheduler here.
+  //TODO: loop over all slices and run the scheduler for each slice
+  
 
   // Perform round-robin prioritization of UL and DL scheduling. This gives unfair preference to DL over UL. This is
   // done to avoid the issue of sending wrong DAI value in DCI format 0_1 to UE while the PDSCH is allocated

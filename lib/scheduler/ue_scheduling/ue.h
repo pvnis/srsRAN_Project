@@ -165,6 +165,10 @@ public:
   /// \return Returns the number of bytes reserved in the TB for subPDUs (other than padding).
   unsigned build_dl_srb0_transport_block_info(dl_msg_tb_info& tb_info, unsigned tb_size_bytes);
 
+  uint32_t get_slice_id() const { return slice_id; }
+
+  void set_slice_id(uint32_t slice_id_) { slice_id = slice_id_; }
+
 private:
   /// Expert config parameters used for UE scheduler.
   const scheduler_ue_expert_config& expert_cfg;
@@ -197,6 +201,8 @@ private:
 
   /// UE Timing Advance Manager.
   ta_manager ta_mgr;
+
+  uint32_t slice_id = 0;
 };
 
 } // namespace srsran

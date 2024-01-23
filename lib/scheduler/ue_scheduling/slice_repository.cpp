@@ -4,6 +4,9 @@ using namespace srsran;
 
 // load slice database
 void slice_repository::load_slices(){
+    // create default slice
+    
+
     // TODO: load slices from database or copy from gnb app config
     
     add_slice(std::make_unique<slice>(001, 01, 2, s_nssai_t{0,0}, 0));
