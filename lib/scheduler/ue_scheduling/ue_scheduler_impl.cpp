@@ -22,6 +22,7 @@
 
 #include "ue_scheduler_impl.h"
 #include "../policy/scheduler_policy_factory.h"
+#include <string>
 
 using namespace srsran;
 
@@ -48,8 +49,14 @@ void ue_scheduler_impl::add_cell(const ue_scheduler_cell_params& params)
 void ue_scheduler_impl::run_sched_strategy(slot_point slot_tx, du_cell_index_t cell_index)
 {
   // Print resource grid for debugging purposes.
-  /*const cell_slot_resource_grid& grid = ue_res_grid_view.get_pdsch_grid(cell_index);
-  const crb_bitmap used_crbs = grid.used_crbs(ss.bwp->dl_common->generic_params.scs, ss.dl_crb_lims, pdsch.symbols);*/
+  uint8_t k0 = 0;
+  const cell_slot_resource_grid& grid = ue_res_grid_view.get_pdsch_grid(cell_index,k0);
+  //crb_interval dl_crb_lims{0,51};
+  //ofdm_symbol_range symbols_lims{2,14};
+  //const crb_bitmap used_crbs = grid.used_crbs(subcarrier_spacing::kHz30, dl_crb_lims, symbols_lims);
+  //logger.debug("cell={}, slot={}: used CRBs befor scheduling: {}", cell_index, slot_tx, used_crbs);
+  logger.debug("cell={}, slot={}: res grid before scheduling: {}", cell_index, slot_tx, grid);
+  
 
   // Update all UEs state.
   ue_db.slot_indication(slot_tx);
@@ -70,6 +77,12 @@ void ue_scheduler_impl::run_sched_strategy(slot_point slot_tx, du_cell_index_t c
     sched_strategy->dl_sched(ue_alloc, ue_res_grid_view, ue_db);
   }
   sched_strategy->ul_sched(ue_alloc, ue_res_grid_view, ue_db);
+
+  // Print CRBs after scheduling for debugging purposes.
+  //const crb_bitmap used_crbs_after = grid.used_crbs(subcarrier_spacing::kHz30, dl_crb_lims, symbols_lims);
+  //logger.debug("cell={}, slot={}: used CRBs after scheduling: {}", cell_index, slot_tx, used_crbs_after);
+
+  logger.debug("cell={}, slot={}: res grid after  scheduling: {}", cell_index, slot_tx, grid);
 }
 
 void ue_scheduler_impl::update_harq_pucch_counter(cell_resource_allocator& cell_alloc)
