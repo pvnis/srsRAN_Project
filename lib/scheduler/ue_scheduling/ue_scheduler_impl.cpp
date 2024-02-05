@@ -48,8 +48,8 @@ void ue_scheduler_impl::add_cell(const ue_scheduler_cell_params& params)
 void ue_scheduler_impl::run_sched_strategy(slot_point slot_tx, du_cell_index_t cell_index)
 {
   // Print resource grid for debugging purposes.
-  const cell_slot_resource_grid& grid = ue_res_grid_view.get_pdsch_grid(cell_index);
-  const crb_bitmap used_crbs = grid.used_crbs(ss.bwp->dl_common->generic_params.scs, ss.dl_crb_lims, pdsch.symbols);
+  /*const cell_slot_resource_grid& grid = ue_res_grid_view.get_pdsch_grid(cell_index);
+  const crb_bitmap used_crbs = grid.used_crbs(ss.bwp->dl_common->generic_params.scs, ss.dl_crb_lims, pdsch.symbols);*/
 
   // Update all UEs state.
   ue_db.slot_indication(slot_tx);
