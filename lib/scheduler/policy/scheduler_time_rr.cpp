@@ -111,7 +111,7 @@ static alloc_outcome alloc_dl_ue(const ue&                    u,
 
     // Iterate through allocation parameter candidates.
     for (const ue_pdsch_param_candidate_searcher::candidate& param_candidate : candidates) {
-      logger.debug("ue={} rnti={} PDSCH allocation candidate: {}", ue_cc.ue_index, ue_cc.rnti(), param_candidate.harq.id);
+      logger.debug("ue={} rnti={} PDSCH allocation candidate: {}", ue_cc.ue_index, ue_cc.rnti(), param_candidate.harq()));
       const pdsch_time_domain_resource_allocation& pdsch    = param_candidate.pdsch_td_res();
       const search_space_info&                     ss       = param_candidate.ss();
       const dl_harq_process&                       h        = param_candidate.harq();
