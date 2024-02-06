@@ -330,6 +330,7 @@ bool e2sm_kpm_du_meas_provider_impl::get_drb_dl_mean_throughput(
                        ue.second.counter) /
         seconds; // unit is kbps
   }
+  logger.debug(ues.size() == 0 ? "No UEs provided." : "UEs provided.");
   if (ues.size() == 0) {
     meas_record_item_c meas_record_item;
     int                total_throughput = 0;
