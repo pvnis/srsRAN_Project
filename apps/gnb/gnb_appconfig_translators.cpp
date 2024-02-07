@@ -827,6 +827,8 @@ std::vector<du_cell_config> srsran::generate_du_cell_config(const gnb_appconfig&
           du_pucch_cfg, out_cell.ul_cfg_common.init_ul_bwp.generic_params.crbs.length(), is_long_prach);
     }
 
+    out_cell.slice_cfg = config.slice_cfg;
+
     logger.info(
         "SSB derived parameters for cell: {}, band: {}, dl_arfcn:{}, crbs: {} scs:{}, ssb_scs:{}:\n\t - SSB offset "
         "pointA:{} \n\t - k_SSB:{} \n\t - SSB arfcn:{} \n\t - Coreset index:{} \n\t - Searchspace index:{}",
@@ -1706,6 +1708,9 @@ scheduler_expert_config srsran::generate_scheduler_expert_config(const gnb_appco
 
   // Logging and tracing.
   out_cfg.log_broadcast_messages = config.log_cfg.broadcast_enabled;
+
+  // Slices
+  out_cfg.ue.slice_cfg = config.slice_cfg;
 
   const error_type<std::string> error = is_scheduler_expert_config_valid(out_cfg);
   if (!error) {

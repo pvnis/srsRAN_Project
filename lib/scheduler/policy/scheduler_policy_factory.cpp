@@ -27,5 +27,5 @@ using namespace srsran;
 
 std::unique_ptr<scheduler_policy> srsran::create_scheduler_strategy(const scheduler_strategy_params& params)
 {
-  return std::make_unique<scheduler_time_rr>();
+  return std::make_unique<scheduler_time_rr>(params.nssai, params.logger);
 }

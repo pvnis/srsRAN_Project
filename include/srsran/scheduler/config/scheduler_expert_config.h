@@ -95,6 +95,8 @@ struct scheduler_ue_expert_config {
   uint8_t dl_harq_la_ri_drop_threshold{1};
   // Automatic HARQ acknowledgement (used for NTN cases with no HARQ feedback)
   bool auto_ack_harq{false};
+
+  std::vector<s_nssai_t> slice_cfg;
 };
 
 /// \brief System Information scheduling statically configurable expert parameters.

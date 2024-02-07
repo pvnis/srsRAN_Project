@@ -98,7 +98,7 @@ private:
 
   /// Scheduling Strategy.
   ue_resource_grid_view             ue_res_grid_view;
-  std::unique_ptr<scheduler_policy> sched_strategy;
+  std::vector<scheduler_policy>     slices;
 
   /// Repository of created UEs.
   ue_repository ue_db;

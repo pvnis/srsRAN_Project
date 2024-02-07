@@ -31,11 +31,15 @@ ue_scheduler_impl::ue_scheduler_impl(const scheduler_ue_expert_config& expert_cf
                                      scheduler_metrics_handler&        metric_handler,
                                      scheduler_event_logger&           sched_ev_logger) :
   expert_cfg(expert_cfg_),
-  sched_strategy(create_scheduler_strategy(scheduler_strategy_params{"time_rr", &srslog::fetch_basic_logger("SCHED")})),
+  //sched_strategy(create_scheduler_strategy(scheduler_strategy_params{"time_rr", &srslog::fetch_basic_logger("SCHED")})),
   ue_alloc(expert_cfg, ue_db, srslog::fetch_basic_logger("SCHED")),
   event_mng(ue_db, metric_handler, sched_ev_logger),
   logger(srslog::fetch_basic_logger("SCHED"))
 {
+  // create scheduler for each slice
+  for (const auto& slice : expert_cfg.slice_cfg) {
+    sched_strategy.push_back(create_scheduler_strategy(scheduler_strategy_params{"time_rr", slice.nssai_t, &srslog::fetch_basic_logger("SCHED")}));
+  }
 }
 
 void ue_scheduler_impl::add_cell(const ue_scheduler_cell_params& params)
