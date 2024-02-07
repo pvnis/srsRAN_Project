@@ -114,7 +114,10 @@ void e2sm_kpm_du_meas_provider_impl::report_metrics(const rlc_metrics& metrics)
     ue_aggr_rlc_metrics[metrics.ue_index].rx      = metrics.rx;
     ue_aggr_rlc_metrics[metrics.ue_index].tx      = metrics.tx;
     ue_aggr_rlc_metrics[metrics.ue_index].counter = 1;
+    logger.debug("Reset aggregated RLC metrics for UE {}.", metrics.ue_index);
   } else {
+    // currently this is never called
+    logger.debug("Aggregate RLC metrics for UE {}.", metrics.ue_index);
     // Otherwise, aggregate RLC metrics for each UE.
     ue_aggr_rlc_metrics[metrics.ue_index].rx.num_lost_pdus += metrics.rx.num_lost_pdus;
     ue_aggr_rlc_metrics[metrics.ue_index].rx.num_malformed_pdus += metrics.rx.num_malformed_pdus;
@@ -273,6 +276,7 @@ bool e2sm_kpm_du_meas_provider_impl::get_rsrp(const asn1::e2sm_kpm::label_info_l
   return meas_collected;
 }
 
+// where is this function called? So the input ues is what?
 bool e2sm_kpm_du_meas_provider_impl::get_rsrq(const asn1::e2sm_kpm::label_info_list_l          label_info_list,
                                               const std::vector<asn1::e2sm_kpm::ueid_c>&       ues,
                                               const srsran::optional<asn1::e2sm_kpm::cgi_c>    cell_global_id,
@@ -312,6 +316,9 @@ bool e2sm_kpm_du_meas_provider_impl::get_drb_dl_mean_throughput(
   if (ue_aggr_rlc_metrics.size() == 0) {
     return meas_collected;
   }
+
+  // ue->first is the UE index, ue->second is the aggregated RLC metrics
+
   for (auto& ue : ue_aggr_rlc_metrics) {
     size_t num_pdu_bytes_with_segmentation;
     switch (ue.second.tx.mode) {
@@ -330,7 +337,10 @@ bool e2sm_kpm_du_meas_provider_impl::get_drb_dl_mean_throughput(
                        ue.second.counter) /
         seconds; // unit is kbps
   }
+
   logger.debug(ues.size() == 0 ? "No UEs provided." : "UEs provided.");
+
+  // if ues is empty, then we calculate the average throughput of all UEs
   if (ues.size() == 0) {
     meas_record_item_c meas_record_item;
     int                total_throughput = 0;
@@ -342,6 +352,7 @@ bool e2sm_kpm_du_meas_provider_impl::get_drb_dl_mean_throughput(
     meas_collected = true;
   }
 
+  // if ues is not empty, then we calculate the throughput of each UE
   for (auto& ue : ues) {
     meas_record_item_c  meas_record_item;
     gnb_cu_ue_f1ap_id_t gnb_cu_ue_f1ap_id = int_to_gnb_cu_ue_f1ap_id(ue.gnb_du_ueid().gnb_cu_ue_f1_ap_id);
