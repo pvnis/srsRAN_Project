@@ -120,7 +120,7 @@ void ue::handle_reconfiguration_request(const ue_reconf_command& cmd)
   }
 
   for(auto lc : ue_ded_cfg->logical_channels()) {
-    if(lc.lcid <= LCID_MIN_DRB) {
+    if(lc.lcid < LCID_MIN_DRB) {
       continue;
     }
     this->s_nssai = lc.s_nssai;

@@ -40,6 +40,9 @@ ue_scheduler_impl::ue_scheduler_impl(const scheduler_ue_expert_config& expert_cf
   for (const auto& slice : expert_cfg.slice_cfg) {
     slices.push_back(create_scheduler_strategy(scheduler_strategy_params{"time_rr", slice, srslog::fetch_basic_logger("SCHED")}));
   }
+
+  // create default slice
+  slices.push_back(create_scheduler_strategy(scheduler_strategy_params{"time_rr", s_nssai_t{0}, srslog::fetch_basic_logger("SCHED")}));
 }
 
 void ue_scheduler_impl::add_cell(const ue_scheduler_cell_params& params)
