@@ -42,7 +42,7 @@ void ue_context_modification_procedure::operator()(coro_context<async_task<f1ap_
 {
   CORO_BEGIN(ctx);
 
-  ue_ctxt.logger.log_debug("\"{}\" initialized", name());
+  ue_ctxt.logger.log_debug("\"{}\" initialized mod", name());
 
   // Subscribe to respective publisher to receive UE CONTEXT MODIFICATION RESPONSE/FAILURE message.
   transaction_sink.subscribe_to(ue_ctxt.ev_mng.context_modification_outcome);

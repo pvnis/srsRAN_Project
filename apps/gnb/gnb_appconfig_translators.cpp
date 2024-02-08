@@ -827,8 +827,6 @@ std::vector<du_cell_config> srsran::generate_du_cell_config(const gnb_appconfig&
           du_pucch_cfg, out_cell.ul_cfg_common.init_ul_bwp.generic_params.crbs.length(), is_long_prach);
     }
 
-    out_cell.slice_cfg = config.slice_cfg;
-
     logger.info(
         "SSB derived parameters for cell: {}, band: {}, dl_arfcn:{}, crbs: {} scs:{}, ssb_scs:{}:\n\t - SSB offset "
         "pointA:{} \n\t - k_SSB:{} \n\t - SSB arfcn:{} \n\t - Coreset index:{} \n\t - Searchspace index:{}",

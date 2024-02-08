@@ -28,7 +28,7 @@ namespace srsran {
 
 struct scheduler_strategy_params {
   std::string           strategy = "time_rr";
-  nssai_t               nssai;
+  s_nssai_t               nssai;
   srslog::basic_logger& logger;
 };
 

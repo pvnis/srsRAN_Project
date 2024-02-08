@@ -38,7 +38,7 @@ ue_scheduler_impl::ue_scheduler_impl(const scheduler_ue_expert_config& expert_cf
 {
   // create scheduler for each slice
   for (const auto& slice : expert_cfg.slice_cfg) {
-    sched_strategy.push_back(create_scheduler_strategy(scheduler_strategy_params{"time_rr", slice.nssai_t, &srslog::fetch_basic_logger("SCHED")}));
+    slices.push_back(create_scheduler_strategy(scheduler_strategy_params{"time_rr", slice, srslog::fetch_basic_logger("SCHED")}));
   }
 }
 
@@ -72,15 +72,24 @@ void ue_scheduler_impl::run_sched_strategy(slot_point slot_tx, du_cell_index_t c
     return;
   }
 
+  // Run the scheduling strategy for each slice
+  for (const auto& slice : slices) {
+    if (expert_cfg.enable_csi_rs_pdsch_multiplexing or (*cells[cell_index]->cell_res_alloc)[0].result.dl.csi_rs.empty()) {
+      slice->dl_sched(ue_alloc, ue_res_grid_view, ue_db);
+    }
+
+    slice->ul_sched(ue_alloc, ue_res_grid_view, ue_db);
+  }
+
   // Perform round-robin prioritization of UL and DL scheduling. This gives unfair preference to DL over UL. This is
   // done to avoid the issue of sending wrong DAI value in DCI format 0_1 to UE while the PDSCH is allocated
   // right after allocating PUSCH in the same slot, resulting in gNB expecting 1 HARQ ACK bit to be multiplexed in
   // UCI in PUSCH and UE sending 4 HARQ ACK bits (DAI = 3).
   // Example: K1==K2=4 and PUSCH is allocated before PDSCH.
-  if (expert_cfg.enable_csi_rs_pdsch_multiplexing or (*cells[cell_index]->cell_res_alloc)[0].result.dl.csi_rs.empty()) {
-    sched_strategy->dl_sched(ue_alloc, ue_res_grid_view, ue_db);
-  }
-  sched_strategy->ul_sched(ue_alloc, ue_res_grid_view, ue_db);
+  // if (expert_cfg.enable_csi_rs_pdsch_multiplexing or (*cells[cell_index]->cell_res_alloc)[0].result.dl.csi_rs.empty()) {
+  //   sched_strategy->dl_sched(ue_alloc, ue_res_grid_view, ue_db);
+  // }
+  // sched_strategy->ul_sched(ue_alloc, ue_res_grid_view, ue_db);
 
   // Print CRBs after scheduling for debugging purposes.
   //const crb_bitmap used_crbs_after = grid.used_crbs(subcarrier_spacing::kHz30, dl_crb_lims, symbols_lims);

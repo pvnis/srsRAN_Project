@@ -49,7 +49,7 @@ void ue_context_setup_procedure::operator()(coro_context<async_task<f1ap_ue_cont
 {
   CORO_BEGIN(ctx);
 
-  logger.debug("ue={}: \"{}\" initialized", request.ue_index, name());
+  logger.debug("ue={}: \"{}\" initialized setup", request.ue_index, name());
 
   // Create UE context in CU-CP.
   if (not allocate_cu_ue_id()) {
@@ -74,7 +74,7 @@ void ue_context_setup_procedure::operator()(coro_context<async_task<f1ap_ue_cont
   create_ue_context_setup_result();
 
   if (response.success) {
-    logger.debug("ue={}: \"{}\" finalized", request.ue_index, name());
+    logger.debug("ue={}: \"{}\" finalized!!?", request.ue_index, name());
   } else {
     logger.error("ue={}: \"{}\" failed", request.ue_index, name());
 

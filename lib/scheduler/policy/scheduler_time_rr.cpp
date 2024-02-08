@@ -48,9 +48,9 @@ du_ue_index_t round_robin_apply(const ue_repository& ue_db, du_ue_index_t next_u
     const ue&           u            = **it;
 
     // Skip UEs that are not in our slice
-    if (u.nssai() != nssai) {
-      continue;
-    }
+    // if (u.nssai() != nssai) {
+    //   continue;
+    // }
 
     const alloc_outcome alloc_result = alloc_ue(u);
     if (alloc_result == alloc_outcome::skip_slot) {
@@ -347,9 +347,9 @@ static alloc_outcome alloc_ul_ue(const ue&                    u,
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-scheduler_time_rr::scheduler_time_rr(nssai_t nssai, srslog::basic_logger& logger) :
-  nssai(nssai),
-  logger(logger),
+scheduler_time_rr::scheduler_time_rr(s_nssai_t nssai_, srslog::basic_logger& logger_) :
+  nssai(nssai_),
+  logger(logger_),
   next_dl_ue_index(INVALID_DU_UE_INDEX),
   next_ul_ue_index(INVALID_DU_UE_INDEX)
 {
