@@ -24,6 +24,7 @@
 
 #include "srsran/adt/optional.h"
 #include "srsran/ran/lcid.h"
+#include "srsran/ran/s_nssai.h"
 #include "srsran/ran/sr_configuration.h"
 #include "srsran/scheduler/config/logical_channel_group.h"
 
@@ -34,6 +35,7 @@ struct logical_channel_config {
   lcid_t  lcid;
   uint8_t priority;
   // TODO: add remaining fields;
+  s_nssai_t                       s_nssai;
   lcg_id_t                        lc_group;
   optional<scheduling_request_id> sr_id;
   bool                            lc_sr_mask;

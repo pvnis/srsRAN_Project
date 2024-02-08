@@ -63,6 +63,11 @@ f1ap_drb_to_setup make_drb_to_setup(const Asn1Type& drb_item)
   }
   drb_obj.five_qi = uint_to_five_qi(
       drb_item.qos_info.choice_ext().value().drb_info().drb_qos.qos_characteristics.non_dyn_5qi().five_qi);
+  drb_obj.nssai.sst = (uint8_t) drb_item.qos_info.choice_ext().value().drb_info().snssai.sst.to_number();
+  if (drb_item.qos_info.choice_ext().value().drb_info().snssai.sd_present) {
+    drb_obj.nssai.sd = (unsigned int) drb_item.qos_info.choice_ext().value().drb_info().snssai.sd.to_number();
+  }
+
   return drb_obj;
 }
 

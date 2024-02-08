@@ -74,6 +74,7 @@ void ue_scheduler_impl::run_sched_strategy(slot_point slot_tx, du_cell_index_t c
 
   // Run the scheduling strategy for each slice
   for (const auto& slice : slices) {
+    
     if (expert_cfg.enable_csi_rs_pdsch_multiplexing or (*cells[cell_index]->cell_res_alloc)[0].result.dl.csi_rs.empty()) {
       slice->dl_sched(ue_alloc, ue_res_grid_view, ue_db);
     }

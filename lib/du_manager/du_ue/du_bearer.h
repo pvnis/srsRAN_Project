@@ -28,6 +28,7 @@
 #include "srsran/f1u/du/f1u_config.h"
 #include "srsran/mac/mac_lc_config.h"
 #include "srsran/ran/lcid.h"
+#include "srsran/ran/s_nssai.h"
 #include "srsran/ran/up_transport_layer_info.h"
 #include "srsran/rlc/rlc_config.h"
 #include "srsran/rlc/rlc_entity.h"
@@ -102,6 +103,7 @@ struct du_ue_srb {
 struct du_ue_drb {
   drb_id_t                                                      drb_id;
   lcid_t                                                        lcid;
+  s_nssai_t                                                     s_nssai;
   std::vector<up_transport_layer_info>                          uluptnl_info_list;
   std::vector<up_transport_layer_info>                          dluptnl_info_list;
   rlc_config                                                    rlc_cfg;
@@ -120,6 +122,7 @@ std::unique_ptr<du_ue_drb> create_drb(du_ue_index_t                        ue_in
                                       du_cell_index_t                      pcell_index,
                                       drb_id_t                             drb_id,
                                       lcid_t                               lcid,
+                                      s_nssai_t                            s_nssai,
                                       const rlc_config&                    rlc_cfg,
                                       const mac_lc_config&                 mac_cfg,
                                       const f1u_config&                    f1u_cfg,

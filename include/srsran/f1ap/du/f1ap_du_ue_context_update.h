@@ -28,6 +28,7 @@
 #include "srsran/ran/five_qi.h"
 #include "srsran/ran/lcid.h"
 #include "srsran/ran/up_transport_layer_info.h"
+#include "srsran/ran/s_nssai.h"
 
 namespace srsran {
 namespace srs_du {
@@ -55,6 +56,7 @@ struct f1ap_drb_to_setup {
   optional<lcid_t>                     lcid;
   drb_rlc_mode                         mode;
   five_qi_t                            five_qi;
+  s_nssai_t                            nssai;
   std::vector<up_transport_layer_info> uluptnl_info_list;
 };
 

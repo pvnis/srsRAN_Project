@@ -33,6 +33,7 @@
 #include "srsran/ran/sr_configuration.h"
 #include "srsran/scheduler/scheduler_configurator.h"
 #include "srsran/support/async/async_task.h"
+#include "srsran/ran/s_nssai.h"
 
 namespace srsran {
 
@@ -58,6 +59,7 @@ public:
 /// Parameters passed to MAC concerning a created logical channel.
 struct mac_logical_channel_config {
   lcid_t               lcid;
+  s_nssai_t            s_nssai;
   mac_sdu_rx_notifier* ul_bearer;
   mac_sdu_tx_builder*  dl_bearer;
 };

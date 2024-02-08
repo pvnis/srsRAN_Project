@@ -163,6 +163,7 @@ void ue_configuration_procedure::update_ue_context()
                                                 ue->pcell_index,
                                                 drbtoadd.drb_id,
                                                 it->lcid,
+                                                drbtoadd.nssai,
                                                 it->rlc_cfg,
                                                 it->mac_cfg,
                                                 f1u_cfg_it->second.f1u,
@@ -215,6 +216,7 @@ async_task<mac_ue_reconfiguration_response> ue_configuration_procedure::update_m
     mac_ue_reconf_req.bearers_to_addmod.emplace_back();
     auto& lc_ch     = mac_ue_reconf_req.bearers_to_addmod.back();
     lc_ch.lcid      = bearer.lcid;
+    lc_ch.s_nssai   = drb.nssai;
     lc_ch.ul_bearer = &bearer.connector.mac_rx_sdu_notifier;
     lc_ch.dl_bearer = &bearer.connector.mac_tx_sdu_notifier;
   }

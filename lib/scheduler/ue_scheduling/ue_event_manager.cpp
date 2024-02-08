@@ -150,6 +150,12 @@ void ue_event_manager::handle_ue_creation(ue_config_update_event ev)
       return;
     }
 
+// TODO make this less ghetto
+    // for(auto lc : ev.next_config().logical_channels()) {
+    //   u->s_nssai = lc.s_nssai;
+    //   logger.debug("ue={} lcid={} setting sst={} sd={}", u->ue_index, lc.lcid, u->s_nssai.sst, u->s_nssai.sd);
+    // }
+
     // Insert UE in UE repository.
     du_ue_index_t   ueidx       = u->ue_index;
     rnti_t          rnti        = u->crnti;

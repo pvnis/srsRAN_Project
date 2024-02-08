@@ -118,6 +118,7 @@ std::unique_ptr<du_ue_drb> srsran::srs_du::create_drb(du_ue_index_t             
                                                       du_cell_index_t                      pcell_index,
                                                       drb_id_t                             drb_id,
                                                       lcid_t                               lcid,
+                                                      s_nssai_t                            s_nssai,
                                                       const rlc_config&                    rlc_cfg,
                                                       const mac_lc_config&                 mac_cfg,
                                                       const f1u_config&                    f1u_cfg,
@@ -145,6 +146,7 @@ std::unique_ptr<du_ue_drb> srsran::srs_du::create_drb(du_ue_index_t             
   // > Setup DRB config
   drb->drb_id  = drb_id;
   drb->lcid    = lcid;
+  drb->s_nssai = s_nssai;
   drb->rlc_cfg = rlc_cfg;
   drb->f1u_cfg = f1u_cfg;
   drb->mac_cfg = mac_cfg;

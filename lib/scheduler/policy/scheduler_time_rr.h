@@ -23,6 +23,7 @@
 #pragma once
 
 #include "scheduler_policy.h"
+#include "srsran/ran/s_nssai.h"
 
 namespace srsran {
 
@@ -38,7 +39,7 @@ public:
   ul_sched(ue_pusch_allocator& pusch_alloc, const ue_resource_grid_view& res_grid, const ue_repository& ues) override;
 
 private:
-  s_nssai_t             nssai;
+  s_nssai_t             s_nssai;
   srslog::basic_logger& logger;
   du_ue_index_t         next_dl_ue_index, next_ul_ue_index;
 };

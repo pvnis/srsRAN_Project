@@ -107,6 +107,7 @@ sched_ue_config_request srsran::srs_du::create_scheduler_ue_config_request(const
     auto& sched_lc_ch                     = sched_cfg.lc_config_list->back();
     sched_lc_ch.priority                  = bearer.second->mac_cfg.priority;
     sched_lc_ch.lc_group                  = bearer.second->mac_cfg.lcg_id;
+    sched_lc_ch.s_nssai                   = bearer.second->s_nssai;
     sched_lc_ch.lc_sr_mask                = bearer.second->mac_cfg.lc_sr_mask;
     sched_lc_ch.lc_sr_delay_timer_applied = bearer.second->mac_cfg.lc_sr_delay_applied;
     sched_lc_ch.sr_id.emplace(bearer.second->mac_cfg.sr_id);

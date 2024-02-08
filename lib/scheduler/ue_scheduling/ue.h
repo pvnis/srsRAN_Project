@@ -197,6 +197,9 @@ private:
 
   /// UE Timing Advance Manager.
   ta_manager ta_mgr;
+
+public:
+  s_nssai_t s_nssai;
 };
 
 } // namespace srsran

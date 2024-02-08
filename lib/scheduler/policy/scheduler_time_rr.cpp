@@ -25,15 +25,17 @@
 #include "../support/rb_helper.h"
 #include "../ue_scheduling/ue_pdsch_param_candidate_searcher.h"
 
+
 using namespace srsran;
 
 /// \brief Algorithm to select next UE to allocate in a time-domain RR fashion
 /// \param[in] ue_db map of "slot_ue"
 /// \param[in] next_ue_index UE index with the highest priority to be allocated.
 /// \param[in] alloc_ue callable with signature "bool(ue&)" that returns true if UE allocation was successful.
+/// \param[in] s_nssai Slice NSSAI to allocate UEs for.
 /// \return Index of next UE to allocate.
 template <typename AllocUEFunc>
-du_ue_index_t round_robin_apply(const ue_repository& ue_db, du_ue_index_t next_ue_index, const AllocUEFunc& alloc_ue)
+du_ue_index_t round_robin_apply(const ue_repository& ue_db, du_ue_index_t next_ue_index, const AllocUEFunc& alloc_ue, const s_nssai_t& nssai)
 {
   if (ue_db.empty()) {
     return next_ue_index;
@@ -48,7 +50,8 @@ du_ue_index_t round_robin_apply(const ue_repository& ue_db, du_ue_index_t next_u
     const ue&           u            = **it;
 
     // Skip UEs that are not in our slice
-    // if (u.nssai() != nssai) {
+    // do we need to care about UE nssai not being set??
+    // if (u.s_nssai.sst != nssai.sst or u.s_nssai.sd != nssai.sd) {
     //   continue;
     // }
 
@@ -348,7 +351,7 @@ static alloc_outcome alloc_ul_ue(const ue&                    u,
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 scheduler_time_rr::scheduler_time_rr(s_nssai_t nssai_, srslog::basic_logger& logger_) :
-  nssai(nssai_),
+  s_nssai(nssai_),
   logger(logger_),
   next_dl_ue_index(INVALID_DU_UE_INDEX),
   next_ul_ue_index(INVALID_DU_UE_INDEX)
@@ -359,6 +362,8 @@ void scheduler_time_rr::dl_sched(ue_pdsch_allocator&          pdsch_alloc,
                                  const ue_resource_grid_view& res_grid,
                                  const ue_repository&         ues)
 {
+  logger.debug("Running DL scheduling for slice sst={} sd={}", s_nssai.sst, s_nssai.sd);
+
   auto tx_ue_function = [this, &res_grid, &pdsch_alloc](const ue& u) {
     return alloc_dl_ue(u, res_grid, pdsch_alloc, false, logger);
   };
@@ -367,15 +372,17 @@ void scheduler_time_rr::dl_sched(ue_pdsch_allocator&          pdsch_alloc,
   };
 
   // First schedule re-transmissions.
-  next_dl_ue_index = round_robin_apply(ues, next_dl_ue_index, retx_ue_function);
+  next_dl_ue_index = round_robin_apply(ues, next_dl_ue_index, retx_ue_function, s_nssai);
   // Then, schedule new transmissions.
-  next_dl_ue_index = round_robin_apply(ues, next_dl_ue_index, tx_ue_function);
+  next_dl_ue_index = round_robin_apply(ues, next_dl_ue_index, tx_ue_function, s_nssai);
 }
 
 void scheduler_time_rr::ul_sched(ue_pusch_allocator&          pusch_alloc,
                                  const ue_resource_grid_view& res_grid,
                                  const ue_repository&         ues)
 {
+  logger.debug("Running UL scheduling for slice sst={} sd={}", s_nssai.sst, s_nssai.sd);
+
   auto data_retx_ue_function = [this, &res_grid, &pusch_alloc](const ue& u) {
     return alloc_ul_ue(u, res_grid, pusch_alloc, true, false, logger);
   };
@@ -386,9 +393,9 @@ void scheduler_time_rr::ul_sched(ue_pusch_allocator&          pusch_alloc,
     return alloc_ul_ue(u, res_grid, pusch_alloc, false, true, logger);
   };
   // First schedule UL data re-transmissions.
-  next_ul_ue_index = round_robin_apply(ues, next_ul_ue_index, data_retx_ue_function);
+  next_ul_ue_index = round_robin_apply(ues, next_ul_ue_index, data_retx_ue_function, s_nssai);
   // Then, schedule all pending SR.
-  next_ul_ue_index = round_robin_apply(ues, next_ul_ue_index, sr_ue_function);
+  next_ul_ue_index = round_robin_apply(ues, next_ul_ue_index, sr_ue_function, s_nssai);
   // Finally, schedule UL data new transmissions.
-  next_ul_ue_index = round_robin_apply(ues, next_ul_ue_index, data_tx_ue_function);
+  next_ul_ue_index = round_robin_apply(ues, next_ul_ue_index, data_tx_ue_function, s_nssai);
 }

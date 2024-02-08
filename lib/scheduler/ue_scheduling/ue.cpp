@@ -118,6 +118,14 @@ void ue::handle_reconfiguration_request(const ue_reconf_command& cmd)
         ue_du_cells[ue_ded_cfg->ue_cell_cfg(to_ue_cell_index(ue_cell_index)).cell_cfg_common.cell_index];
     ue_cells[ue_cell_index] = ue_cell_inst.get();
   }
+
+  for(auto lc : ue_ded_cfg->logical_channels()) {
+    if(lc.lcid <= LCID_MIN_DRB) {
+      continue;
+    }
+    this->s_nssai = lc.s_nssai;
+    logger.debug("ue={} lcid={} reconfiguring sst={} sd={}", ue_index, lc.lcid, s_nssai.sst, s_nssai.sd);
+  }
 }
 
 unsigned ue::pending_dl_newtx_bytes() const
