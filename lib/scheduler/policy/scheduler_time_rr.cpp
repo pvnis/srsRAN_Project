@@ -124,7 +124,7 @@ static alloc_outcome alloc_dl_ue(const ue&                    u,
 
     // Iterate through allocation parameter candidates.
     for (const ue_pdsch_param_candidate_searcher::candidate& param_candidate : candidates) {
-      logger.debug("raphael: ue={} rnti={} harq_id={} ss_id={}, ss start={} stop={}, ofdm start={} stop={}, k0={}", ue_cc.ue_index, ue_cc.rnti(), param_candidate.harq().id, param_candidate.ss().cfg->get_id(), param_candidate.ss().dl_crb_lims.start(), 
+      logger.debug("ue={} rnti={} harq_id={} ss_id={}, ss start={} stop={}, ofdm start={} stop={}, k0={}", ue_cc.ue_index, ue_cc.rnti(), param_candidate.harq().id, param_candidate.ss().cfg->get_id(), param_candidate.ss().dl_crb_lims.start(), 
                                                                                       param_candidate.ss().dl_crb_lims.stop(), param_candidate.pdsch_td_res().symbols.start(), param_candidate.pdsch_td_res().symbols.stop(), param_candidate.pdsch_td_res().k0);  
       
       const pdsch_time_domain_resource_allocation& pdsch    = param_candidate.pdsch_td_res();
