@@ -41,6 +41,9 @@ ue_scheduler_impl::ue_scheduler_impl(const scheduler_ue_expert_config& expert_cf
     slices.push_back(create_scheduler_strategy(scheduler_strategy_params{"time_rr", slice, srslog::fetch_basic_logger("SCHED")}));
   }
 
+  // sort the slices in descending order
+  std::sort(slices.begin(), slices.end(), [](const auto& a, const auto& b) { return a->get_s_nssai().sd.value() > b->get_s_nssai().sd.value(); });
+
   // create default slice
   slices.push_back(create_scheduler_strategy(scheduler_strategy_params{"time_rr", s_nssai_t{0}, srslog::fetch_basic_logger("SCHED")}));
 }

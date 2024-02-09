@@ -38,6 +38,8 @@ public:
   void
   ul_sched(ue_pusch_allocator& pusch_alloc, const ue_resource_grid_view& res_grid, const ue_repository& ues) override;
 
+  const s_nssai_t& get_s_nssai() const override { return s_nssai; }
+
 private:
   s_nssai_t             s_nssai;
   srslog::basic_logger& logger;

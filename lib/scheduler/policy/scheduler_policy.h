@@ -118,6 +118,8 @@ public:
   /// \param[in] ues List of eligible UEs to be scheduled in the given slot.
   virtual void
   ul_sched(ue_pusch_allocator& pusch_alloc, const ue_resource_grid_view& res_grid, const ue_repository& ues) = 0;
+
+  virtual const s_nssai_t& get_s_nssai() const = 0;
 };
 
 } // namespace srsran
