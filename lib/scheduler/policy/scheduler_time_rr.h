@@ -40,6 +40,8 @@ public:
 
   const s_nssai_t& get_s_nssai() const override { return s_nssai; }
 
+  void set_s_nssaiQuota(const uint32_t& newQuota) override { s_nssai.quota = newQuota; }
+
 private:
   s_nssai_t             s_nssai;
   srslog::basic_logger& logger;

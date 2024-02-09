@@ -145,6 +145,7 @@ static alloc_outcome alloc_dl_ue(const ue&                    u,
         logger.debug("ue={} rnti={} PDSCH allocation skipped. Cause: UE's CQI=0 ", ue_cc.ue_index, ue_cc.rnti());
         return alloc_outcome::skip_ue;
       }
+      logger.debug("ue={} rnti={} PDSCH allocation of {} PRBs", ue_cc.ue_index, ue_cc.rnti(), mcs_prbs.n_prbs);
 
       // In case of retx, ensure the RI does not change.
       const unsigned nof_dl_layers =

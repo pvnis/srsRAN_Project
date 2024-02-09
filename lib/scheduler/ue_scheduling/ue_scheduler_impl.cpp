@@ -65,7 +65,7 @@ void ue_scheduler_impl::run_sched_strategy(slot_point slot_tx, du_cell_index_t c
   //ofdm_symbol_range symbols_lims{2,14};
   //const crb_bitmap used_crbs = grid.used_crbs(subcarrier_spacing::kHz30, dl_crb_lims, symbols_lims);
   //logger.debug("cell={}, slot={}: used CRBs befor scheduling: {}", cell_index, slot_tx, used_crbs);
-  logger.debug("cell={}, slot={}: res grid before scheduling:", cell_index, slot_tx, grid);
+  logger.debug("cell={}, slot={}: res grid before scheduling: {}", cell_index, slot_tx, grid);
   
 
   // Update all UEs state.
@@ -76,6 +76,12 @@ void ue_scheduler_impl::run_sched_strategy(slot_point slot_tx, du_cell_index_t c
     // Note: we are currently assuming that all cells have the same TDD pattern and that the scheduling strategy
     // only allocates PDCCHs for the current slot_tx.
     return;
+  }
+
+  // Define slice quotas
+  uint32_t nrb = 0;
+  for (const auto& slice : slices) {
+    slice->set_s_nssaiQuota((int) nrb / slices.size());
   }
 
   // Run the scheduling strategy for each slice
