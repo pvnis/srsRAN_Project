@@ -85,6 +85,9 @@ void ue_scheduler_impl::run_sched_strategy(slot_point slot_tx, du_cell_index_t c
       slice->dl_sched(ue_alloc, ue_res_grid_view, ue_db);
     }
 
+    // Print resource grid after each slice is scheduled for debugging purposes.
+    logger.debug("cell={}, slot={}: res grid after scheduling slice sst={} sd={}: {}", cell_index, slot_tx, slice->get_s_nssai().sst, slice->get_s_nssai().sd, grid);
+
     slice->ul_sched(ue_alloc, ue_res_grid_view, ue_db);
   }
 
@@ -101,8 +104,6 @@ void ue_scheduler_impl::run_sched_strategy(slot_point slot_tx, du_cell_index_t c
   // Print CRBs after scheduling for debugging purposes.
   //const crb_bitmap used_crbs_after = grid.used_crbs(subcarrier_spacing::kHz30, dl_crb_lims, symbols_lims);
   //logger.debug("cell={}, slot={}: used CRBs after scheduling: {}", cell_index, slot_tx, used_crbs_after);
-
-  logger.debug("cell={}, slot={}: res grid after  scheduling: {}", cell_index, slot_tx, grid);
 }
 
 void ue_scheduler_impl::update_harq_pucch_counter(cell_resource_allocator& cell_alloc)
