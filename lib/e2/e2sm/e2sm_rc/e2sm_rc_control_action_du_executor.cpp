@@ -103,8 +103,10 @@ e2sm_rc_control_action_2_6_du_executor::execute_ric_control_action(const e2sm_ri
 {
   du_mac_sched_control_config ctrl_config = convert_to_du_config_request(req);
   if (!ctrl_config.ue_id) {
+    logger.error("[Haoxin] UE ID not found in the request");
     return return_ctrl_failure(req);
   }
+  logger.info("[Haoxin] Executing control action 2.6 for UE {}", ctrl_config.ue_id);
   return launch_async(
       [this, ctrl_config = std::move(ctrl_config)](coro_context<async_task<e2sm_ric_control_response>>& ctx) {
         CORO_BEGIN(ctx);
@@ -115,21 +117,30 @@ e2sm_rc_control_action_2_6_du_executor::execute_ric_control_action(const e2sm_ri
       });
 };
 
+// decode the e2sm_ric_control_request message
 du_mac_sched_control_config
 e2sm_rc_control_action_2_6_du_executor::convert_to_du_config_request(const e2sm_ric_control_request& e2sm_req_)
 {
   du_mac_sched_control_config        ctrl_config = {};
   const e2_sm_rc_ctrl_hdr_format1_s& ctrl_hdr =
       variant_get<e2_sm_rc_ctrl_hdr_s>(e2sm_req_.request_ctrl_hdr).ric_ctrl_hdr_formats.ctrl_hdr_format1();
+  // or here extract from the message is wrong
   const e2_sm_rc_ctrl_msg_format1_s& ctrl_msg =
       variant_get<e2_sm_rc_ctrl_msg_s>(e2sm_req_.request_ctrl_msg).ric_ctrl_msg_formats.ctrl_msg_format1();
 
+  logger.info("[Haoxin] Enter function convert_to_du_config_request");
+  logger.info("[Haoxin] UE ID: {}", ctrl_hdr.ue_id.gnb_ue_id().amf_ue_ngap_id);
+  // now we only get one ran_p in the ran_p_list
+  // only param_id = 1 is here, others are not
   for (auto& ran_p : ctrl_msg.ran_p_list) {
+    logger.info("[Haoxin] RAN parameter ID: {}", ran_p.ran_param_id);
     if (action_params.find(ran_p.ran_param_id) != action_params.end()) {
       if (ran_p.ran_param_id == 11) {
         ctrl_config.min_prb_alloc = ran_p.ran_param_value_type.ran_p_choice_elem_true().ran_param_value.value_int();
+        // TODO: this UE ID may also be a problem, here is gnb_du_ue_id, but in xAPP it's gnb_ue_id
         ctrl_config.ue_id         = ctrl_hdr.ue_id.gnb_du_ue_id().gnb_cu_ue_f1ap_id;
       } else if (ran_p.ran_param_id == 12) {
+        logger.info("[Haoxin] Find RAN parameter 12: Max PRB Policy Ratio");
         ctrl_config.max_prb_alloc = ran_p.ran_param_value_type.ran_p_choice_elem_true().ran_param_value.value_int();
         ctrl_config.ue_id         = ctrl_hdr.ue_id.gnb_du_ue_id().gnb_cu_ue_f1ap_id;
       }

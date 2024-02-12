@@ -140,6 +140,7 @@ e2sm_rc_control_service::execute_control_request(const e2sm_ric_control_request&
       variant_get<e2_sm_rc_ctrl_hdr_s>(req.request_ctrl_hdr).ric_ctrl_hdr_formats.ctrl_hdr_format1();
 
   if (config_req_executors.find(ctrl_hdr.ric_ctrl_action_id) == config_req_executors.end()) {
+    logger.error("[Haoxin] Control Action %i not supported", ctrl_hdr.ric_ctrl_action_id);
     return launch_async([](coro_context<async_task<e2sm_ric_control_response>>& ctx) {
       CORO_BEGIN(ctx);
       e2sm_ric_control_response ctrl_response;
@@ -148,7 +149,9 @@ e2sm_rc_control_service::execute_control_request(const e2sm_ric_control_request&
       CORO_RETURN(ctrl_response);
     });
   }
-
+  // so we can find the action ID, and start to exectue the action 6 (Slicing PRB quota control action)
+  // i.e., the control header is correctly decoded
+  logger.info("[Haoxin] Executing control action {}", ctrl_hdr.ric_ctrl_action_id);
   return config_req_executors[ctrl_hdr.ric_ctrl_action_id]->execute_ric_control_action(req);
 }
 

@@ -1,0 +1,14 @@
+{
+
+    "configurations": [
+    {
+      "name": "(gdb) Launch",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "/opt/srsRAN_Project/build/apps/gnb/gnb",
+      "args": ["-c", "/opt/gnb.yaml"],
+      "cwd": "${fileDirname}",
+      "environment": []
+    }
+    ]
+  }

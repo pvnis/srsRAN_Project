@@ -116,7 +116,7 @@ void e2sm_kpm_report_service_style1::clear_collect_measurements()
   // Reset indication msg ready flag.
   is_ind_msg_ready_ = false;
 }
-
+// ues={} (don't show individual ues)
 bool e2sm_kpm_report_service_style1::collect_measurements()
 {
   // Set the granularity period (TODO: disable as currently not supported in flexric).
@@ -169,6 +169,7 @@ void e2sm_kpm_report_service_style2::clear_collect_measurements()
   is_ind_msg_ready_ = false;
 }
 
+// ues={ue_id} (only show one individual ue)
 bool e2sm_kpm_report_service_style2::collect_measurements()
 {
   // Fill indication msg.
@@ -246,6 +247,7 @@ void e2sm_kpm_report_service_style3::clear_collect_measurements()
   is_ind_msg_ready_ = false;
 }
 
+// ues={all matching ues}
 bool e2sm_kpm_report_service_style3::collect_measurements()
 {
   std::vector<asn1::e2sm_kpm::ueid_c> all_matching_ues;

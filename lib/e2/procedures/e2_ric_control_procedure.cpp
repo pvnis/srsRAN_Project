@@ -44,6 +44,7 @@ void e2_ric_control_procedure::operator()(coro_context<async_task<void>>& ctx)
     CORO_EARLY_RETURN();
   }
 
+  // either here hanlde_packed gets wrong
   ric_ctrl_req    = e2sm_iface->get_e2sm_packer().handle_packed_ric_control_request(e2_request.request);
   control_service = e2sm_iface->get_e2sm_control_service(ric_ctrl_req);
 
@@ -58,6 +59,8 @@ void e2_ric_control_procedure::operator()(coro_context<async_task<void>>& ctx)
   }
 
   CORO_AWAIT_VALUE(e2sm_response, control_service->execute_control_request(ric_ctrl_req));
+  // now this e2sm_response.success is false
+  logger.info("[Haoxin] E2SM RESPONSE SUCCESS: {}", e2sm_response.success);
   if (ric_ctrl_req.ric_ctrl_ack_request_present and ric_ctrl_req.ric_ctrl_ack_request) {
     e2_response = e2sm_iface->get_e2sm_packer().pack_ric_control_response(e2sm_response);
     if (e2_response.success) {
