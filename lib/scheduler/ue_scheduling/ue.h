@@ -165,6 +165,10 @@ public:
   /// \return Returns the number of bytes reserved in the TB for subPDUs (other than padding).
   unsigned build_dl_srb0_transport_block_info(dl_msg_tb_info& tb_info, unsigned tb_size_bytes);
 
+  bool operator< (const ue& rhs) { 
+    return this->pf_weight < rhs.pf_weight;
+  }
+
 private:
   /// Expert config parameters used for UE scheduler.
   const scheduler_ue_expert_config& expert_cfg;
@@ -200,6 +204,7 @@ private:
 
 public:
   s_nssai_t s_nssai;
+  float pf_weight;
 };
 
 } // namespace srsran

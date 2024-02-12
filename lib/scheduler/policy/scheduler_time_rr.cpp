@@ -24,6 +24,8 @@
 #include "../support/config_helpers.h"
 #include "../support/rb_helper.h"
 #include "../ue_scheduling/ue_pdsch_param_candidate_searcher.h"
+#include <vector>
+#include <algorithm>
 
 using namespace srsran;
 
@@ -41,6 +43,66 @@ du_ue_index_t round_robin_apply(const ue_repository& ue_db, du_ue_index_t next_u
   }
   auto it          = ue_db.lower_bound(next_ue_index);
   bool first_alloc = true;
+  for (unsigned count = 0; count < ue_db.size(); ++count, ++it) {
+    // check if slice has RB left
+    if (s_quota.quota <= 0){
+      break;
+    }
+
+    if (it == ue_db.end()) {
+      // wrap-around
+      it = ue_db.begin();
+    }
+    const ue&           u            = **it;
+
+    // Skip UEs that are not in our slice
+    // do we need to care about UE nssai not being set??
+    if (u.s_nssai.sst != nssai.sst or u.s_nssai.sd != nssai.sd) {
+    //if (u.s_nssai != nssai) {
+      logger.debug("Skipping UE={} with sst={} sd={} in slice sst={} sd={}", u.crnti, u.s_nssai.sst, u.s_nssai.sd, nssai.sst, nssai.sd);
+      continue;
+    }
+
+    logger.debug("Scheduling UE={} with sst={} sd={} in slice sst={} sd={}", u.crnti, u.s_nssai.sst, u.s_nssai.sd, nssai.sst, nssai.sd);
+
+    const alloc_outcome alloc_result = alloc_ue(u);
+    if (alloc_result == alloc_outcome::skip_slot) {
+      // Grid allocator directed policy to stop allocations for this slot.
+      break;
+    }
+
+    if (alloc_result == alloc_outcome::success and first_alloc) {
+      // Mark the next UE to be the first UE to get allocated in the following slot.
+      // It is important that we equally distribute the opportunity to be the first UE being allocated in a slot for
+      // all UEs. Otherwise, we could end up in a situation, where a UE is always the last one to be allocated and
+      // can only use the RBs that were left from the previous UE allocations.
+      next_ue_index = to_du_ue_index((unsigned)u.ue_index + 1U);
+      first_alloc   = false;
+    }
+  }
+  return next_ue_index;
+}
+
+/// \brief Algorithm to select next UE to allocate in a time-domain PF fashion
+/// \param[in] ue_db map of "slot_ue"
+/// \param[in] next_ue_index UE index with the highest priority to be allocated.
+/// \param[in] alloc_ue callable with signature "bool(ue&)" that returns true if UE allocation was successful.
+/// \param[in] s_nssai Slice NSSAI to allocate UEs for.
+/// \return Index of next UE to allocate.
+template <typename AllocUEFunc>
+du_ue_index_t proportional_fair_apply(const ue_repository& ue_db, du_ue_index_t next_ue_index, const AllocUEFunc& alloc_ue, const s_nssai_t& nssai, s_quota_t s_quota, srslog::basic_logger& logger)
+{
+  if (ue_db.empty()) {
+    return next_ue_index;
+  }
+  auto it          = ue_db.lower_bound(next_ue_index);
+  bool first_alloc = true;
+
+  // order UEs by PF metric
+  std::sort(ue_db.begin(), ue_db.end(), [](const ue& a, const ue& b) {
+    return a.pf_weight < b.pf_weight;
+  });
+
   for (unsigned count = 0; count < ue_db.size(); ++count, ++it) {
     // check if slice has RB left
     if (s_quota.quota <= 0){
@@ -384,17 +446,85 @@ void scheduler_time_rr::dl_sched(ue_pdsch_allocator&          pdsch_alloc,
 {
   logger.debug("Running DL scheduling for slice sst={} sd={}", s_nssai.sst, s_nssai.sd);
 
-  auto tx_ue_function = [this, &res_grid, &pdsch_alloc](const ue& u) {
-    return alloc_dl_ue(u, res_grid, pdsch_alloc, false, s_nssai, s_quota, logger);
-  };
-  auto retx_ue_function = [this, &res_grid, &pdsch_alloc](const ue& u) {
-    return alloc_dl_ue(u, res_grid, pdsch_alloc, true, s_nssai, s_quota, logger);
-  };
+  // Create sub-list of UEs in our slice
+  // ue_repository ues_slice;
+  // for (const auto& ue : ues) {
+  //   if (ue->s_nssai.sst == s_nssai.sst and ue->s_nssai.sd == s_nssai.sd) {
+  //     ues_slice.add_ue(clone(ue));
+  //   }
+  // }
+
+  // Order UE sub-list (only UEs in our slice) by PF metric
+  std::sort(ues.begin(), ues.end());
 
   // First schedule re-transmissions.
-  next_dl_ue_index = round_robin_apply(ues, next_dl_ue_index, retx_ue_function, s_nssai, s_quota, logger);
+  if (!ues.empty()) {
+    auto it          = ues.begin();
+    for (unsigned count = 0; count < ues.size(); ++count, ++it) {
+      // check if slice has RB left
+      if (s_quota.quota <= 0){
+        break;
+      }
+
+      // Check if we are at the end of the list
+      if (it == ues.end()) {
+        break;
+      }
+
+      const ue&           u            = **it;
+
+    // Skip UEs that are not in our slice
+    // do we need to care about UE nssai not being set??
+    if (u.s_nssai.sst != s_nssai.sst or u.s_nssai.sd != s_nssai.sd) {
+    //if (u.s_nssai != nssai) {
+      logger.debug("Skipping UE={} with sst={} sd={} in slice sst={} sd={}", u.crnti, u.s_nssai.sst, u.s_nssai.sd, s_nssai.sst, s_nssai.sd);
+      continue;
+    }
+
+      logger.debug("Scheduling UE={} with sst={} sd={} in slice sst={} sd={}", u.crnti, u.s_nssai.sst, u.s_nssai.sd, s_nssai.sst, s_nssai.sd);
+
+      const alloc_outcome alloc_result = alloc_dl_ue(u, res_grid, pdsch_alloc, true, s_nssai, s_quota, logger);
+      if (alloc_result == alloc_outcome::skip_slot) {
+        // Grid allocator directed policy to stop allocations for this slot.
+        break;
+      }
+    }
+  }
+  
   // Then, schedule new transmissions.
-  next_dl_ue_index = round_robin_apply(ues, next_dl_ue_index, tx_ue_function, s_nssai, s_quota, logger);
+  if (!ues.empty()) {
+    auto it          = ues.begin();
+    for (unsigned count = 0; count < ues.size(); ++count, ++it) {
+      // check if slice has RB left
+      if (s_quota.quota <= 0){
+        break;
+      }
+
+      // Check if we are at the end of the list
+      if (it == ues.end()) {
+        break;
+      }
+
+      const ue&           u            = **it;
+
+    // Skip UEs that are not in our slice
+    // do we need to care about UE nssai not being set??
+    if (u.s_nssai.sst != s_nssai.sst or u.s_nssai.sd != s_nssai.sd) {
+    //if (u.s_nssai != nssai) {
+      logger.debug("Skipping UE={} with sst={} sd={} in slice sst={} sd={}", u.crnti, u.s_nssai.sst, u.s_nssai.sd, s_nssai.sst, s_nssai.sd);
+      continue;
+    }
+
+      logger.debug("Scheduling UE={} with sst={} sd={} in slice sst={} sd={}", u.crnti, u.s_nssai.sst, u.s_nssai.sd, s_nssai.sst, s_nssai.sd);
+
+      const alloc_outcome alloc_result = alloc_dl_ue(u, res_grid, pdsch_alloc, false, s_nssai, s_quota, logger);
+      if (alloc_result == alloc_outcome::skip_slot) {
+        // Grid allocator directed policy to stop allocations for this slot.
+        break;
+      }
+    }
+  }
+
 }
 
 void scheduler_time_rr::ul_sched(ue_pusch_allocator&          pusch_alloc,
@@ -412,10 +542,21 @@ void scheduler_time_rr::ul_sched(ue_pusch_allocator&          pusch_alloc,
   auto sr_ue_function = [this, &res_grid, &pusch_alloc](const ue& u) {
     return alloc_ul_ue(u, res_grid, pusch_alloc, false, true, s_nssai, s_quota, logger);
   };
-  // First schedule UL data re-transmissions.
-  next_ul_ue_index = round_robin_apply(ues, next_ul_ue_index, data_retx_ue_function, s_nssai, s_quota, logger);
-  // Then, schedule all pending SR.
-  next_ul_ue_index = round_robin_apply(ues, next_ul_ue_index, sr_ue_function, s_nssai, s_quota, logger);
-  // Finally, schedule UL data new transmissions.
-  next_ul_ue_index = round_robin_apply(ues, next_ul_ue_index, data_tx_ue_function, s_nssai, s_quota, logger);
+
+  // Schedule for low latency slices
+  if (s_nssai.ll) {
+    // First schedule UL data re-transmissions.
+    next_ul_ue_index = round_robin_apply(ues, next_ul_ue_index, data_retx_ue_function, s_nssai, s_quota, logger);
+    // Then, schedule all pending SR.
+    next_ul_ue_index = round_robin_apply(ues, next_ul_ue_index, sr_ue_function, s_nssai, s_quota, logger);
+    // Finally, schedule UL data new transmissions.
+    next_ul_ue_index = round_robin_apply(ues, next_ul_ue_index, data_tx_ue_function, s_nssai, s_quota, logger);
+  } else { // Schedule for non-low latency slices
+    // First schedule UL data re-transmissions.
+    next_ul_ue_index = round_robin_apply(ues, next_ul_ue_index, data_retx_ue_function, s_nssai, s_quota, logger);
+    // Then, schedule all pending SR.
+    next_ul_ue_index = round_robin_apply(ues, next_ul_ue_index, sr_ue_function, s_nssai, s_quota, logger);
+    // Finally, schedule UL data new transmissions.
+    next_ul_ue_index = round_robin_apply(ues, next_ul_ue_index, data_tx_ue_function, s_nssai, s_quota, logger);
+  }
 }
