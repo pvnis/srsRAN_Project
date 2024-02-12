@@ -435,7 +435,6 @@ static alloc_outcome alloc_ul_ue(const ue&                    u,
 scheduler_time_rr::scheduler_time_rr(s_nssai_t nssai_, srslog::basic_logger& logger_) :
   s_nssai(nssai_),
   logger(logger_),
-  next_dl_ue_index(INVALID_DU_UE_INDEX),
   next_ul_ue_index(INVALID_DU_UE_INDEX)
 {
 }
@@ -454,13 +453,15 @@ void scheduler_time_rr::dl_sched(ue_pdsch_allocator&          pdsch_alloc,
   //   }
   // }
   // Create sub-list of UEs in our slice using copy_if
-  ue_repository ues_slice;
-  std::copy_if(ues.begin(), ues.end(), std::back_inserter(ues_slice), [this](const ue& u) {
-    return u.s_nssai.sst == s_nssai.sst and u.s_nssai.sd == s_nssai.sd;
+  std::vector<std::shared_ptr<ue>> ues_slice;
+  std::copy_if(ues.begin(), ues.end(), std::back_inserter(ues_slice), [this](const std::shared_ptr<ue>& u) {
+    return u->s_nssai.sst == s_nssai.sst and u->s_nssai.sd == s_nssai.sd;
   });
 
   // Order UE sub-list (only UEs in our slice) by PF metric
-  // std::sort(ues_slice.begin(), ues_slice.end());
+  std::sort(ues_slice.begin(), ues_slice.end(), [](const std::shared_ptr<ue>& a, const std::shared_ptr<ue>& b) {
+    return a->pf_weight < b->pf_weight;
+  });
 
   // First schedule re-transmissions.
   if (!ues_slice.empty()) {
@@ -481,11 +482,11 @@ void scheduler_time_rr::dl_sched(ue_pdsch_allocator&          pdsch_alloc,
 
     // Skip UEs that are not in our slice
     // do we need to care about UE nssai not being set??
-    if (u.s_nssai.sst != s_nssai.sst or u.s_nssai.sd != s_nssai.sd) {
-    //if (u.s_nssai != nssai) {
-      logger.debug("Skipping UE={} with sst={} sd={} in slice sst={} sd={}", u.crnti, u.s_nssai.sst, u.s_nssai.sd, s_nssai.sst, s_nssai.sd);
-      continue;
-    }
+    // if (u.s_nssai.sst != s_nssai.sst or u.s_nssai.sd != s_nssai.sd) {
+    // //if (u.s_nssai != nssai) {
+    //   logger.debug("Skipping UE={} with sst={} sd={} in slice sst={} sd={}", u.crnti, u.s_nssai.sst, u.s_nssai.sd, s_nssai.sst, s_nssai.sd);
+    //   continue;
+    // }
 
       logger.debug("Scheduling UE={} with sst={} sd={} in slice sst={} sd={}", u.crnti, u.s_nssai.sst, u.s_nssai.sd, s_nssai.sst, s_nssai.sd);
 

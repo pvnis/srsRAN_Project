@@ -112,7 +112,7 @@ void ue_repository::slot_indication(slot_point sl_tx)
   }
 }
 
-void ue_repository::add_ue(std::unique_ptr<ue> u)
+void ue_repository::add_ue(std::shared_ptr<ue> u)
 {
   // Add UE in repository.
   du_ue_index_t ue_index = u->ue_index;

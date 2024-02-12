@@ -56,7 +56,7 @@ private:
   s_nssai_t             s_nssai;
   s_quota_t             s_quota;
   srslog::basic_logger& logger;
-  du_ue_index_t         next_dl_ue_index, next_ul_ue_index;
+  du_ue_index_t         next_ul_ue_index;
 };
 
 } // namespace srsran

@@ -137,7 +137,7 @@ ue_event_manager::~ue_event_manager() {}
 void ue_event_manager::handle_ue_creation(ue_config_update_event ev)
 {
   // Create UE object outside the scheduler slot indication handler to minimize latency.
-  std::unique_ptr<ue> u = std::make_unique<ue>(ue_creation_command{
+  std::shared_ptr<ue> u = std::make_shared<ue>(ue_creation_command{
       ev.next_config(), ev.get_fallback_command().has_value() and ev.get_fallback_command().value(), metrics_handler});
 
   // Defer UE object addition to ue list to the slot indication handler.

@@ -32,7 +32,7 @@ namespace srsran {
 /// Container that stores all scheduler UEs.
 class ue_repository
 {
-  using ue_list = slotted_id_table<du_ue_index_t, std::unique_ptr<ue>, MAX_NOF_DU_UES>;
+  using ue_list = slotted_id_table<du_ue_index_t, std::shared_ptr<ue>, MAX_NOF_DU_UES>;
 
 public:
   using value_type     = ue_list::value_type;
@@ -55,7 +55,7 @@ public:
   const ue* find_by_rnti(rnti_t rnti) const;
 
   /// \brief Add new UE in the UE repository.
-  void add_ue(std::unique_ptr<ue> u);
+  void add_ue(std::shared_ptr<ue> u);
 
   /// \brief Initiate removal of existing UE from the repository.
   void schedule_ue_rem(ue_config_delete_event ev);
