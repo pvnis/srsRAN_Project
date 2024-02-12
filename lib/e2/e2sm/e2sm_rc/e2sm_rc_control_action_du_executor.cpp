@@ -103,7 +103,7 @@ e2sm_rc_control_action_2_6_du_executor::execute_ric_control_action(const e2sm_ri
 {
   du_mac_sched_control_config ctrl_config = convert_to_du_config_request(req);
   if (!ctrl_config.ue_id) {
-    logger.error("[Haoxin] UE ID not found in the request");
+    logger.error("[Haoxin] UE ID not found in the request in execute_ric_control_action");
     return return_ctrl_failure(req);
   }
   logger.info("[Haoxin] Executing control action 2.6 for UE {}", ctrl_config.ue_id);
@@ -129,7 +129,6 @@ e2sm_rc_control_action_2_6_du_executor::convert_to_du_config_request(const e2sm_
       variant_get<e2_sm_rc_ctrl_msg_s>(e2sm_req_.request_ctrl_msg).ric_ctrl_msg_formats.ctrl_msg_format1();
 
   logger.info("[Haoxin] Enter function convert_to_du_config_request");
-  logger.info("[Haoxin] UE ID: {}", ctrl_hdr.ue_id.gnb_ue_id().amf_ue_ngap_id);
   // now we only get one ran_p in the ran_p_list
   // only param_id = 1 is here, others are not
   for (auto& ran_p : ctrl_msg.ran_p_list) {
@@ -140,9 +139,12 @@ e2sm_rc_control_action_2_6_du_executor::convert_to_du_config_request(const e2sm_
         // TODO: this UE ID may also be a problem, here is gnb_du_ue_id, but in xAPP it's gnb_ue_id
         ctrl_config.ue_id         = ctrl_hdr.ue_id.gnb_du_ue_id().gnb_cu_ue_f1ap_id;
       } else if (ran_p.ran_param_id == 12) {
-        logger.info("[Haoxin] Find RAN parameter 12: Max PRB Policy Ratio");
+        logger.info("[Haoxin] The RAN parameter value: {}", ran_p.ran_param_value_type.ran_p_choice_elem_true().ran_param_value.value_int());
         ctrl_config.max_prb_alloc = ran_p.ran_param_value_type.ran_p_choice_elem_true().ran_param_value.value_int();
-        ctrl_config.ue_id         = ctrl_hdr.ue_id.gnb_du_ue_id().gnb_cu_ue_f1ap_id;
+        // ctrl_config.ue_id         = ctrl_hdr.ue_id.gnb_du_ue_id().gnb_cu_ue_f1ap_id;
+        // but in the DU, it's really f1ap_id, so this may not work for us...
+        ctrl_config.ue_id         = ctrl_hdr.ue_id.gnb_ue_id().amf_ue_ngap_id;
+        logger.info("[Haoxin] UE ID: {}", ctrl_config.ue_id);
       }
     } else {
       logger.error("Parameter not supported");
