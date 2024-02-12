@@ -445,13 +445,6 @@ void scheduler_time_rr::dl_sched(ue_pdsch_allocator&          pdsch_alloc,
 {
   logger.debug("Running DL scheduling for slice sst={} sd={}", s_nssai.sst, s_nssai.sd);
 
-  // Create sub-list of UEs in our slice
-  // ue_repository ues_slice;
-  // for (const auto& ue : ues) {
-  //   if (ue->s_nssai.sst == s_nssai.sst and ue->s_nssai.sd == s_nssai.sd) {
-  //     ues_slice.add_ue(clone(ue));
-  //   }
-  // }
   // Create sub-list of UEs in our slice using copy_if
   std::vector<std::shared_ptr<ue>> ues_slice;
   std::copy_if(ues.begin(), ues.end(), std::back_inserter(ues_slice), [this](const std::shared_ptr<ue>& u) {
@@ -464,71 +457,35 @@ void scheduler_time_rr::dl_sched(ue_pdsch_allocator&          pdsch_alloc,
   });
 
   // First schedule re-transmissions.
-  if (!ues_slice.empty()) {
-    auto it          = ues_slice.begin();
-    for (unsigned count = 0; count < ues_slice.size(); ++count, ++it) {
-      // check if slice has RB left, if no RBs are left, stop scheduling but update the PF weights
-      if (s_quota.quota <= 0){
-        // update PF weights
-        continue;
-      }
+  for (auto u : ues_slice) {
+    // check if slice has RB left, if no RBs are left, stop scheduling but update the PF weights
+    if (s_quota.quota <= 0){
+      // update PF weights
+      continue;
+    }
 
-      // Check if we are at the end of the list
-      if (it == ues_slice.end()) {
-        break;
-      }
+    logger.debug("Scheduling UE={} with sst={} sd={} in slice sst={} sd={}", u->crnti, u->s_nssai.sst, u->s_nssai.sd, s_nssai.sst, s_nssai.sd);
 
-      const ue&           u            = **it;
-
-    // Skip UEs that are not in our slice
-    // do we need to care about UE nssai not being set??
-    // if (u.s_nssai.sst != s_nssai.sst or u.s_nssai.sd != s_nssai.sd) {
-    // //if (u.s_nssai != nssai) {
-    //   logger.debug("Skipping UE={} with sst={} sd={} in slice sst={} sd={}", u.crnti, u.s_nssai.sst, u.s_nssai.sd, s_nssai.sst, s_nssai.sd);
-    //   continue;
-    // }
-
-      logger.debug("Scheduling UE={} with sst={} sd={} in slice sst={} sd={}", u.crnti, u.s_nssai.sst, u.s_nssai.sd, s_nssai.sst, s_nssai.sd);
-
-      const alloc_outcome alloc_result = alloc_dl_ue(u, res_grid, pdsch_alloc, true, s_nssai, s_quota, logger);
-      if (alloc_result == alloc_outcome::skip_slot) {
-        // Grid allocator directed policy to stop allocations for this slot.
-        break;
-      }
+    const alloc_outcome alloc_result = alloc_dl_ue(*u, res_grid, pdsch_alloc, true, s_nssai, s_quota, logger);
+    if (alloc_result == alloc_outcome::skip_slot) {
+      // Grid allocator directed policy to stop allocations for this slot.
+      break;
     }
   }
   
   // Then, schedule new transmissions.
-  if (!ues_slice.empty()) {
-    auto it          = ues_slice.begin();
-    for (unsigned count = 0; count < ues_slice.size(); ++count, ++it) {
-      // check if slice has RB left
-      if (s_quota.quota <= 0){
-        break;
-      }
-
-      // Check if we are at the end of the list
-      if (it == ues_slice.end()) {
-        break;
-      }
-
-      const ue&           u            = **it;
-
-    // Skip UEs that are not in our slice
-    // do we need to care about UE nssai not being set??
-    if (u.s_nssai.sst != s_nssai.sst or u.s_nssai.sd != s_nssai.sd) {
-    //if (u.s_nssai != nssai) {
-      logger.debug("Skipping UE={} with sst={} sd={} in slice sst={} sd={}", u.crnti, u.s_nssai.sst, u.s_nssai.sd, s_nssai.sst, s_nssai.sd);
-      continue;
+  for (auto u : ues_slice) {
+    // check if slice has RB left
+    if (s_quota.quota <= 0){
+      break;
     }
 
-      logger.debug("Scheduling UE={} with sst={} sd={} in slice sst={} sd={}", u.crnti, u.s_nssai.sst, u.s_nssai.sd, s_nssai.sst, s_nssai.sd);
+    logger.debug("Scheduling UE={} with sst={} sd={} in slice sst={} sd={}", u->crnti, u->s_nssai.sst, u->s_nssai.sd, s_nssai.sst, s_nssai.sd);
 
-      const alloc_outcome alloc_result = alloc_dl_ue(u, res_grid, pdsch_alloc, false, s_nssai, s_quota, logger);
-      if (alloc_result == alloc_outcome::skip_slot) {
-        // Grid allocator directed policy to stop allocations for this slot.
-        break;
-      }
+    const alloc_outcome alloc_result = alloc_dl_ue(*u, res_grid, pdsch_alloc, false, s_nssai, s_quota, logger);
+    if (alloc_result == alloc_outcome::skip_slot) {
+      // Grid allocator directed policy to stop allocations for this slot.
+      break;
     }
   }
 
