@@ -49,6 +49,9 @@ du_ue_index_t round_robin_apply(const ue_repository& ue_db, du_ue_index_t next_u
     }
     const ue&           u            = **it;
 
+    // check if slice has any RB left
+    
+
     // Skip UEs that are not in our slice
     // do we need to care about UE nssai not being set??
     if (u.s_nssai.sst != nssai.sst or u.s_nssai.sd != nssai.sd) {

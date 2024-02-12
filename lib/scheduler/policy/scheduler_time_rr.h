@@ -24,6 +24,7 @@
 
 #include "scheduler_policy.h"
 #include "srsran/ran/s_nssai.h"
+#include "srsran/ran/slice.h"
 
 namespace srsran {
 
@@ -40,10 +41,20 @@ public:
 
   const s_nssai_t& get_s_nssai() const override { return s_nssai; }
 
-  void set_s_nssaiQuota(const uint32_t& newQuota) override { s_nssai.quota = newQuota; }
+  const uint32_t& get_s_quota() const override { return s_quota.quota; }
+
+  const uint32_t& get_s_leftover() const override { return s_quota.leftover; }
+
+  void set_s_nssaiQuota(const uint32_t& newQuota) override { s_quota.quota = newQuota; }
+
+  // void set_s_nssaiRemaining(const uint32_t& newRem) override { s_quota.remaining = newRem; }
+
+  void set_s_nssaiLeftOver(const uint32_t& newLO) override { s_quota.leftover = newLO; }
+
 
 private:
   s_nssai_t             s_nssai;
+  s_quota_t             s_quota;
   srslog::basic_logger& logger;
   du_ue_index_t         next_dl_ue_index, next_ul_ue_index;
 };
