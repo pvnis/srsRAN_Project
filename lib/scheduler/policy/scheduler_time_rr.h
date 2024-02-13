@@ -63,17 +63,20 @@ public:
         const slot_point pdcch_slot = res_grid.get_pdcch_slot(ue_cc.cell_index);
         ue_pdsch_param_candidate_searcher candidates{*ue, to_ue_cell_index(i), false, pdcch_slot};
         // only use the first candidate to calculate the PRBs
-        // const ue_pdsch_param_candidate_searcher::candidate& param_candidate = *candidates.begin();
-        // const pdsch_time_domain_resource_allocation& pdsch = param_candidate.pdsch_td_res();
-        // const dci_dl_rnti_config_type dci_type = param_candidate.dci_dl_rnti_cfg_type();
-        // prbs += ue_cc.required_dl_prbs(pdsch, ue->pending_dl_newtx_bytes(), dci_type).n_prbs;
-        for (const ue_pdsch_param_candidate_searcher::candidate& param_candidate : candidates) {
+        if (candidates.begin() != candidates.end()){
+          const ue_pdsch_param_candidate_searcher::candidate& param_candidate = *candidates.begin();
           const pdsch_time_domain_resource_allocation& pdsch = param_candidate.pdsch_td_res();
           const dci_dl_rnti_config_type dci_type = param_candidate.dci_dl_rnti_cfg_type();
           prbs += ue_cc.required_dl_prbs(pdsch, ue->pending_dl_newtx_bytes(), dci_type).n_prbs;
-          break;
+          logger.debug("Poll: UE {} in slice sst={} sd={} needs {} PRBs", ue_cc.rnti(), s_nssai.sst, s_nssai.sd, prbs);
         }
-        logger.debug("Poll: UE {} in slice sst={} sd={} needs {} PRBs", ue_cc.rnti(), s_nssai.sst, s_nssai.sd, prbs);
+        // for (const ue_pdsch_param_candidate_searcher::candidate& param_candidate : candidates) {
+        //   const pdsch_time_domain_resource_allocation& pdsch = param_candidate.pdsch_td_res();
+        //   const dci_dl_rnti_config_type dci_type = param_candidate.dci_dl_rnti_cfg_type();
+        //   prbs += ue_cc.required_dl_prbs(pdsch, ue->pending_dl_newtx_bytes(), dci_type).n_prbs;
+        //   break;
+        // }
+        // logger.debug("Poll: UE {} in slice sst={} sd={} needs {} PRBs", ue_cc.rnti(), s_nssai.sst, s_nssai.sd, prbs);
       }
     }
     s_quota.needs = prbs;
