@@ -90,8 +90,9 @@ void ue_scheduler_impl::run_sched_strategy(slot_point slot_tx, du_cell_index_t c
     logger.debug("Slice sst={} sd={} needs {} RBs", slice->get_s_nssai().sst, slice->get_s_nssai().sd, slice->get_s_needs());
   }
 
-  // Define slice quotas. Look at expert_cfg.max_pdschs_per_slot for the number of RBs to be allocated. nof_rbs()
-  uint32_t nrb = grid.get_carrier_res_grid(subcarrier_spacing::kHz30).nof_rbs();
+  // Define slice quotas. Look at expert_cfg.max_pdschs_per_slot for the number of RBs to be allocated. 
+  // Compute the total available RBs without PDCCH 
+  uint32_t nrb = grid.get_carrier_res_grid(subcarrier_spacing::kHz30).nof_rbs() - grid.used_crbs(subcarrier_spacing::kHz30, dl_crb_lims, symbols_lims).count();
   logger.debug("Available RBs {}", nrb);
   for (const auto& slice : slices) {
     slice->set_s_nssaiQuota((int) nrb / slices.size());
