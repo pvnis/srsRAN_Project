@@ -91,7 +91,7 @@ static alloc_outcome alloc_dl_ue(const ue&                    u,
                                  ue_pdsch_allocator&          pdsch_alloc,
                                  bool                         is_retx,
                                  s_nssai_t                    s_nssai,
-                                 s_quota_t                    s_quota,
+                                 s_quota_t&                   s_quota,
                                  srslog::basic_logger&        logger)
 {
   if (not is_retx and not u.has_pending_dl_newtx_bytes()) {
@@ -194,6 +194,8 @@ static alloc_outcome alloc_dl_ue(const ue&                    u,
         // If the allocation failed due to invalid parameters, we continue iteration.
         if (result != alloc_outcome::invalid_params) {
           // Reduce slice quota
+          if (s_quota.quota < 17)
+            logger.debug("Slice quota lower than 17: available {} PRBs", s_quota.quota);
           s_quota.quota -= ue_grant_crbs.length();
           logger.debug("Slice sd={} sst={} quota reduced from {} PRBs to {} PRBs", s_nssai.sd, s_nssai.sst, s_quota.quota + ue_grant_crbs.length(), s_quota.quota);
           return result;
@@ -438,6 +440,7 @@ void scheduler_time_rr::dl_sched(ue_pdsch_allocator&          pdsch_alloc,
       break;
     }
     // Update longrun_throughput
+    // TODO is pending_dl_newtx_bytes() the right call here?
     u->longrun_throughput = (1 - ALPHA) * u->longrun_throughput + ALPHA * u->pending_dl_newtx_bytes();
   }
 
