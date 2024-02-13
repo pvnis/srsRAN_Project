@@ -451,6 +451,11 @@ void scheduler_time_rr::dl_sched(ue_pdsch_allocator&          pdsch_alloc,
     return u->s_nssai.sst == s_nssai.sst and u->s_nssai.sd == s_nssai.sd;
   });
 
+  // Compute PF weight for each UE
+  for (auto u : ues_slice) {
+    u->pf_weight = u->sch_mcs_description.get_spectral_efficiency() / u->longrun_throughput
+  }
+
   // Order UE sub-list (only UEs in our slice) by PF metric
   std::sort(ues_slice.begin(), ues_slice.end(), [](const std::shared_ptr<ue>& a, const std::shared_ptr<ue>& b) {
     return a->pf_weight < b->pf_weight;
@@ -471,6 +476,8 @@ void scheduler_time_rr::dl_sched(ue_pdsch_allocator&          pdsch_alloc,
       // Grid allocator directed policy to stop allocations for this slot.
       break;
     }
+    // Update longrun_throughput
+    u->longrun_throughput = (1 - ALPHA) * u->longrun_throughput + ALPHA * u->pending_dl_newtx_bytes();
   }
   
   // Then, schedule new transmissions.
