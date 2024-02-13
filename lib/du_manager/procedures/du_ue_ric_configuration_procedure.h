@@ -54,6 +54,8 @@ private:
   du_ue* ue = nullptr;
 
   manual_event<du_mac_sched_control_config_response> ue_config_completed;
+
+  srslog::basic_logger&           logger;
 };
 
 } // namespace srs_du

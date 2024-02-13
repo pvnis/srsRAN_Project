@@ -65,6 +65,8 @@ public:
 
   size_t nof_ues() override;
 
+  // this function is from du_configurator
+  // du_manager_impl -> du_manager_interface -> du_configurator
   async_task<du_mac_sched_control_config_response>
   configure_ue_mac_scheduler(srsran::du_mac_sched_control_config reconf) override;
 

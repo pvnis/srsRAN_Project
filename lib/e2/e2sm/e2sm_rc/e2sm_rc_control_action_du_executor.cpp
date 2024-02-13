@@ -139,8 +139,11 @@ e2sm_rc_control_action_2_6_du_executor::convert_to_du_config_request(const e2sm_
         // TODO: this UE ID may also be a problem, here is gnb_du_ue_id, but in xAPP it's gnb_ue_id
         ctrl_config.ue_id         = ctrl_hdr.ue_id.gnb_du_ue_id().gnb_cu_ue_f1ap_id;
       } else if (ran_p.ran_param_id == 12) {
-        logger.info("[Haoxin] The RAN parameter value: {}", ran_p.ran_param_value_type.ran_p_choice_elem_true().ran_param_value.value_int());
         ctrl_config.max_prb_alloc = ran_p.ran_param_value_type.ran_p_choice_elem_true().ran_param_value.value_int();
+
+        // test the following procedure to change scheduler configuration
+        ctrl_config.max_prb_alloc = 26;
+        logger.info("[Haoxin] The RAN control value: {}", ctrl_config.max_prb_alloc);
         // ctrl_config.ue_id         = ctrl_hdr.ue_id.gnb_du_ue_id().gnb_cu_ue_f1ap_id;
         // but in the DU, it's really f1ap_id, so this may not work for us...
         ctrl_config.ue_id         = ctrl_hdr.ue_id.gnb_ue_id().amf_ue_ngap_id;

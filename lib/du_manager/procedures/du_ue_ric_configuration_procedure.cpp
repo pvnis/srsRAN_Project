@@ -29,7 +29,7 @@ using namespace srs_du;
 du_ue_ric_configuration_procedure::du_ue_ric_configuration_procedure(const du_mac_sched_control_config& request_,
                                                                      du_ue_manager_repository&          ue_mng_,
                                                                      const du_manager_params&           du_params_) :
-  request(request_), ue_mng(ue_mng_), du_params(du_params_)
+  request(request_), ue_mng(ue_mng_), du_params(du_params_), logger(srslog::fetch_basic_logger("DU-MNG"))
 {
 }
 
@@ -54,11 +54,13 @@ manual_event<du_mac_sched_control_config_response>& du_ue_ric_configuration_proc
   // this maybe a problem --> we are using f1ap_ue_id
   ue = ue_mng.find_f1ap_ue_id(static_cast<gnb_du_ue_f1ap_id_t>(request.ue_id));
   if (ue == nullptr) {
+    logger.error("[Haoxin] UE not found for F1AP UE ID {} in dispatch_ue_config_task", request.ue_id);
     du_mac_sched_control_config_response fail{false, false, false};
     ue_config_completed.set(fail);
     return ue_config_completed;
   }
 
+  logger.info("[Haoxin] Dispatching UE RIC configuration task for UE index {}", ue->ue_index);
   // Dispatch UE configuration to UE task loop inside the UE manager.
   ue_mng.schedule_async_task(
       ue->ue_index, launch_async([this](coro_context<async_task<void>>& ctx) {
@@ -84,6 +86,8 @@ async_task<mac_ue_reconfiguration_response> du_ue_ric_configuration_procedure::h
   mac_request.crnti       = ue->rnti;
   mac_request.pcell_index = to_du_cell_index(0);
 
+  logger.info("[Haoxin] Configuring UE MAC scheduler for UE index {} in handle_mac_config", mac_request.ue_index);
+
   // Configure UE resource allocation parameters.
   mac_request.sched_cfg.res_alloc_cfg.emplace();
   auto& res_alloc_cfg = mac_request.sched_cfg.res_alloc_cfg.value();
@@ -95,6 +99,8 @@ async_task<mac_ue_reconfiguration_response> du_ue_ric_configuration_procedure::h
                                            ? request.num_harq_retransmissions.value()
                                            : du_params.mac.sched_cfg.ue.max_nof_harq_retxs;
   res_alloc_cfg.max_pusch_harq_retxs = res_alloc_cfg.max_pdsch_harq_retxs;
+
+  logger.info("[Haoxin] New PRB size limits: {} to {}", res_alloc_cfg.pdsch_grant_size_limits.start(), res_alloc_cfg.pdsch_grant_size_limits.stop());
 
   return du_params.mac.ue_cfg.handle_ue_reconfiguration_request(mac_request);
 }

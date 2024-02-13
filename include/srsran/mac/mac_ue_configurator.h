@@ -90,6 +90,7 @@ struct mac_ue_create_response {
 };
 
 /// Input parameters used to reconfigure a UE in the scheduler.
+// this is related to a specific UE
 struct mac_ue_reconfiguration_request {
   du_ue_index_t                           ue_index;
   du_cell_index_t                         pcell_index;
