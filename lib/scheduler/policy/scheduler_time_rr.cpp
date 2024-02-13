@@ -27,6 +27,8 @@
 #include <vector>
 #include <algorithm>
 
+#define ALPHA 0.1
+
 using namespace srsran;
 
 /// \brief Algorithm to select next UE to allocate in a time-domain RR fashion
@@ -453,7 +455,7 @@ void scheduler_time_rr::dl_sched(ue_pdsch_allocator&          pdsch_alloc,
 
   // Compute PF weight for each UE
   for (auto u : ues_slice) {
-    u->pf_weight = u->sch_mcs_description.get_spectral_efficiency() / u->longrun_throughput
+    u->pf_weight = u->mcs_description.get_spectral_efficiency() / u->longrun_throughput;
   }
 
   // Order UE sub-list (only UEs in our slice) by PF metric
@@ -494,6 +496,8 @@ void scheduler_time_rr::dl_sched(ue_pdsch_allocator&          pdsch_alloc,
       // Grid allocator directed policy to stop allocations for this slot.
       break;
     }
+    // Update longrun_throughput
+    u->longrun_throughput = (1 - ALPHA) * u->longrun_throughput + ALPHA * u->pending_dl_newtx_bytes();
   }
 
 }

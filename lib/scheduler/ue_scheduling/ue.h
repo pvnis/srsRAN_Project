@@ -206,6 +206,10 @@ public:
   s_nssai_t s_nssai;
   float pf_weight;
   float longrun_throughput;
+
+  srsran::sch_mcs_index mcs_value;
+  pdsch_mcs_table mcs_table;
+  sch_mcs_description mcs_description;
 };
 
 } // namespace srsran
