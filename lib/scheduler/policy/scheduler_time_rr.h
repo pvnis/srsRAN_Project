@@ -62,11 +62,21 @@ public:
         const ue_cell&   ue_cc      = ue->get_cell(to_ue_cell_index(i));
         const slot_point pdcch_slot = res_grid.get_pdcch_slot(ue_cc.cell_index);
         ue_pdsch_param_candidate_searcher candidates{*ue, to_ue_cell_index(i), false, pdcch_slot};
+        // only use the first candidate to calculate the PRBs
+        // const ue_pdsch_param_candidate_searcher::candidate& param_candidate = *candidates.begin();
+        // const pdsch_time_domain_resource_allocation& pdsch = param_candidate.pdsch_td_res();
+        // const dci_dl_rnti_config_type dci_type = param_candidate.dci_dl_rnti_cfg_type();
+        // prbs += ue_cc.required_dl_prbs(pdsch, ue->pending_dl_newtx_bytes(), dci_type).n_prbs;
+        int f = 0;
         for (const ue_pdsch_param_candidate_searcher::candidate& param_candidate : candidates) {
           const pdsch_time_domain_resource_allocation& pdsch = param_candidate.pdsch_td_res();
           const dci_dl_rnti_config_type dci_type = param_candidate.dci_dl_rnti_cfg_type();
-          prbs += ue_cc.required_dl_prbs(pdsch, ue->pending_dl_newtx_bytes(), dci_type).n_prbs;
+          if (f == 0) {
+            prbs += ue_cc.required_dl_prbs(pdsch, ue->pending_dl_newtx_bytes(), dci_type).n_prbs;
+          }
+          f++;
         }
+        logger.debug("UE {} in slice sst={} sd={} needs {} PRBs", ue_cc.rnti(), s_nssai.sst, s_nssai.sd, prbs);
       }
     }
     s_quota.needs = prbs;

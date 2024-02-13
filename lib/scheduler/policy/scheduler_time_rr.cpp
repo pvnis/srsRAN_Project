@@ -151,7 +151,6 @@ static alloc_outcome alloc_dl_ue(const ue&                    u,
       grant_prbs_mcs mcs_prbs = is_retx ? grant_prbs_mcs{h.last_alloc_params().tb.front().value().mcs,
                                                          h.last_alloc_params().rbs.type1().length()}
                                         : ue_cc.required_dl_prbs(pdsch, u.pending_dl_newtx_bytes(), dci_type);
-      logger.debug("ue={} rnti={} asked for {} PRBs", ue_cc.ue_index, ue_cc.rnti(), mcs_prbs.n_prbs);
       if (mcs_prbs.n_prbs == 0) {
         logger.debug("ue={} rnti={} PDSCH allocation skipped. Cause: UE's CQI=0 ", ue_cc.ue_index, ue_cc.rnti());
         return alloc_outcome::skip_ue;
