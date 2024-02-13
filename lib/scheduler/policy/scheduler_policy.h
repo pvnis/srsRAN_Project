@@ -122,8 +122,10 @@ public:
   virtual const s_nssai_t& get_s_nssai() const = 0;
   virtual const uint32_t& get_s_quota() const = 0;
   virtual const uint32_t& get_s_leftover() const = 0;
+  virtual const uint32_t& get_s_needs() const = 0;
   virtual void set_s_nssaiQuota(const uint32_t& newQuota) = 0;
   virtual void set_s_nssaiLeftOver(const uint32_t& newLO) = 0;
+  virtual void poll_quota(std::vector<std::shared_ptr<ue>> ues_slice,const ue_resource_grid_view& res_grid) = 0;
 };
 
 } // namespace srsran

@@ -419,6 +419,7 @@ void scheduler_time_rr::dl_sched(ue_pdsch_allocator&          pdsch_alloc,
       break;
     }
     // Update longrun_throughput
+    // TODO is pending_dl_newtx_bytes() the right call here?
     u->longrun_throughput = (1 - ALPHA) * u->longrun_throughput + ALPHA * u->pending_dl_newtx_bytes();
   }
   
@@ -464,5 +465,4 @@ void scheduler_time_rr::ul_sched(ue_pusch_allocator&          pusch_alloc,
   next_ul_ue_index = round_robin_apply(ues, next_ul_ue_index, sr_ue_function, s_nssai, s_quota, logger);
   // Finally, schedule UL data new transmissions.
   next_ul_ue_index = round_robin_apply(ues, next_ul_ue_index, data_tx_ue_function, s_nssai, s_quota, logger);
-  }
 }

@@ -27,6 +27,7 @@
 namespace srsran {
 
 struct s_quota_t {
+  uint32_t needs;   // RB needed by the slice
   uint32_t quota;   // Number of RB allocated to the slice (max 275)
   // optional<uint32_t> remaining;   // Number of RB allocated to the slice (max 275)
   uint32_t leftover = 0;   // Number of RB allocated to the slice (max 275)

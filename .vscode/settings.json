@@ -69,6 +69,8 @@
         "typeinfo": "cpp",
         "variant": "cpp",
         "forward_list": "cpp",
-        "*.ipp": "cpp"
+        "*.ipp": "cpp",
+        "any": "cpp",
+        "valarray": "cpp"
     }
 }

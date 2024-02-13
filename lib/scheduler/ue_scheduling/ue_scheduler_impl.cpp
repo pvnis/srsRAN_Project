@@ -78,6 +78,17 @@ void ue_scheduler_impl::run_sched_strategy(slot_point slot_tx, du_cell_index_t c
     // only allocates PDCCHs for the current slot_tx.
     return;
   }
+  // Poll slices for desired quotas
+  for (const auto& slice : slices) {
+    // get sub-list of UE in slice
+    std::vector<std::shared_ptr<ue>> ues_slice;
+    std::copy_if(ue_db.begin(), ue_db.end(), std::back_inserter(ues_slice), [slice](const std::shared_ptr<ue>& u) {
+      return u->s_nssai.sst == slice->get_s_nssai().sst and u->s_nssai.sd == slice->get_s_nssai().sd;
+    });
+    // Poll
+    slice->poll_quota(ues_slice, ue_res_grid_view);
+    logger.debug("Slice sst={} sd={} needs {} RBs", slice->get_s_nssai().sst, slice->get_s_nssai().sd, slice->get_s_needs());
+  }
 
   // Define slice quotas. Look at expert_cfg.max_pdschs_per_slot for the number of RBs to be allocated. nof_rbs()
   uint32_t nrb = grid.get_carrier_res_grid(subcarrier_spacing::kHz30).nof_rbs();

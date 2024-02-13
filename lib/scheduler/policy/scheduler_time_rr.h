@@ -25,6 +25,8 @@
 #include "scheduler_policy.h"
 #include "srsran/ran/s_nssai.h"
 #include "srsran/ran/slice.h"
+#include "../ue_scheduling/ue_cell.h"
+#include "../ue_scheduling/ue_pdsch_param_candidate_searcher.h"
 
 namespace srsran {
 
@@ -41,6 +43,8 @@ public:
 
   const s_nssai_t& get_s_nssai() const override { return s_nssai; }
 
+  const uint32_t& get_s_needs() const override { return s_quota.needs; }
+
   const uint32_t& get_s_quota() const override { return s_quota.quota; }
 
   const uint32_t& get_s_leftover() const override { return s_quota.leftover; }
@@ -50,6 +54,23 @@ public:
   // void set_s_nssaiRemaining(const uint32_t& newRem) override { s_quota.remaining = newRem; }
 
   void set_s_nssaiLeftOver(const uint32_t& newLO) override { s_quota.leftover = newLO; }
+
+  void poll_quota(std::vector<std::shared_ptr<ue>> ues_slice,const ue_resource_grid_view& res_grid) override {
+    u_int32_t prbs = 0;
+    for (auto& ue : ues_slice) {
+      for (unsigned i = 0; i != ue->nof_cells(); ++i) {
+        const ue_cell&   ue_cc      = ue->get_cell(to_ue_cell_index(i));
+        const slot_point pdcch_slot = res_grid.get_pdcch_slot(ue_cc.cell_index);
+        ue_pdsch_param_candidate_searcher candidates{*ue, to_ue_cell_index(i), false, pdcch_slot};
+        for (const ue_pdsch_param_candidate_searcher::candidate& param_candidate : candidates) {
+          const pdsch_time_domain_resource_allocation& pdsch = param_candidate.pdsch_td_res();
+          const dci_dl_rnti_config_type dci_type = param_candidate.dci_dl_rnti_cfg_type();
+          prbs += ue_cc.required_dl_prbs(pdsch, ue->pending_dl_newtx_bytes(), dci_type).n_prbs;
+        }
+      }
+    }
+    s_quota.needs = prbs;
+  };
 
 
 private:
