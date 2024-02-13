@@ -67,16 +67,13 @@ public:
         // const pdsch_time_domain_resource_allocation& pdsch = param_candidate.pdsch_td_res();
         // const dci_dl_rnti_config_type dci_type = param_candidate.dci_dl_rnti_cfg_type();
         // prbs += ue_cc.required_dl_prbs(pdsch, ue->pending_dl_newtx_bytes(), dci_type).n_prbs;
-        int f = 0;
         for (const ue_pdsch_param_candidate_searcher::candidate& param_candidate : candidates) {
           const pdsch_time_domain_resource_allocation& pdsch = param_candidate.pdsch_td_res();
           const dci_dl_rnti_config_type dci_type = param_candidate.dci_dl_rnti_cfg_type();
-          if (f == 0) {
-            prbs += ue_cc.required_dl_prbs(pdsch, ue->pending_dl_newtx_bytes(), dci_type).n_prbs;
-          }
-          f++;
+          prbs += ue_cc.required_dl_prbs(pdsch, ue->pending_dl_newtx_bytes(), dci_type).n_prbs;
+          break;
         }
-        logger.debug("UE {} in slice sst={} sd={} needs {} PRBs", ue_cc.rnti(), s_nssai.sst, s_nssai.sd, prbs);
+        logger.debug("Poll: UE {} in slice sst={} sd={} needs {} PRBs", ue_cc.rnti(), s_nssai.sst, s_nssai.sd, prbs);
       }
     }
     s_quota.needs = prbs;
