@@ -57,6 +57,7 @@ public:
 
   void poll_quota(std::vector<std::shared_ptr<ue>> ues_slice,const ue_resource_grid_view& res_grid) override {
     u_int32_t prbs = 0;
+    u_int32_t prbs_ue = 0;
     for (auto& ue : ues_slice) {
       for (unsigned i = 0; i != ue->nof_cells(); ++i) {
         const ue_cell&   ue_cc      = ue->get_cell(to_ue_cell_index(i));
@@ -67,8 +68,9 @@ public:
           const ue_pdsch_param_candidate_searcher::candidate& param_candidate = *candidates.begin();
           const pdsch_time_domain_resource_allocation& pdsch = param_candidate.pdsch_td_res();
           const dci_dl_rnti_config_type dci_type = param_candidate.dci_dl_rnti_cfg_type();
-          prbs += ue_cc.required_dl_prbs(pdsch, ue->pending_dl_newtx_bytes(), dci_type).n_prbs;
-          logger.debug("Poll: UE {} in slice sst={} sd={} needs {} PRBs", ue_cc.rnti(), s_nssai.sst, s_nssai.sd, prbs);
+          prbs_ue = ue_cc.required_dl_prbs(pdsch, ue->pending_dl_newtx_bytes(), dci_type).n_prbs;
+          logger.debug("Poll: UE {} in slice sst={} sd={} needs {} PRBs", ue_cc.rnti(), s_nssai.sst, s_nssai.sd, prbs_ue);
+          prbs += prbs_ue;
         }
         // for (const ue_pdsch_param_candidate_searcher::candidate& param_candidate : candidates) {
         //   const pdsch_time_domain_resource_allocation& pdsch = param_candidate.pdsch_td_res();
@@ -81,7 +83,6 @@ public:
     }
     s_quota.needs = prbs;
   };
-
 
 private:
   s_nssai_t             s_nssai;
