@@ -82,6 +82,7 @@ public:
         // }
         // logger.debug("Poll: UE {} in slice sst={} sd={} needs {} PRBs", ue_cc.rnti(), s_nssai.sst, s_nssai.sd, prbs);
       }
+      ue->theoretical_throughput = 0;
     }
     s_quota.needs = prbs;
   };

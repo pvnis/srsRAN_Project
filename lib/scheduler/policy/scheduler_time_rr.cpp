@@ -27,7 +27,7 @@
 #include <vector>
 #include <algorithm>
 
-#define ALPHA 0.1
+#define ALPHA 0.001
 
 using namespace srsran;
 
@@ -86,7 +86,7 @@ du_ue_index_t round_robin_apply(const ue_repository& ue_db, du_ue_index_t next_u
 }
 
 /// Allocate UE PDSCH grant.
-static alloc_outcome alloc_dl_ue(const ue&                    u,
+static alloc_outcome alloc_dl_ue(ue&                          u,
                                  const ue_resource_grid_view& res_grid,
                                  ue_pdsch_allocator&          pdsch_alloc,
                                  bool                         is_retx,
@@ -152,11 +152,6 @@ static alloc_outcome alloc_dl_ue(const ue&                    u,
                                                          h.last_alloc_params().rbs.type1().length()}
                                         : ue_cc.required_dl_prbs(pdsch, u.pending_dl_newtx_bytes(), dci_type);
 
-      // Saving the MCS in the UE database for further use in scheduler. 
-      // u.mcs_value = mcs_prbs.mcs;
-      // u.mcs_table = mcs_prbs.mcs_table;
-      //u.mcs_description = mcs_prbs.mcs_description;
-
       if (mcs_prbs.n_prbs == 0) {
         logger.debug("ue={} rnti={} PDSCH allocation skipped. Cause: UE's CQI=0 ", ue_cc.ue_index, ue_cc.rnti());
         return alloc_outcome::skip_ue;
@@ -204,6 +199,8 @@ static alloc_outcome alloc_dl_ue(const ue&                    u,
             logger.debug("Slice quota lower than 17: available {} PRBs", s_quota.quota);
           s_quota.quota -= ue_grant_crbs.length();
           logger.debug("Slice sd={} sst={} quota reduced from {} PRBs to {} PRBs", s_nssai.sd, s_nssai.sst, s_quota.quota + ue_grant_crbs.length(), s_quota.quota);
+          // Update expected throughput with real throughput
+          u.theoretical_throughput = ue_grant_crbs.length() * mcs_prbs.mcs_description.get_spectral_efficiency();
           return result;
         }
       }
@@ -413,7 +410,7 @@ void scheduler_time_rr::dl_sched(ue_pdsch_allocator&          pdsch_alloc,
 
   // DEBUG: print UE spectral efficiency, longrun throughput and PF weight
   for (auto u : ues_slice) {
-    logger.debug("UE={} with sst={} sd={} in slice sst={} sd={} has spectral efficiency={}, longrun throughput={} and PF weight={}", u->crnti, u->s_nssai.sst, u->s_nssai.sd, s_nssai.sst, s_nssai.sd, u->mcs_description.get_spectral_efficiency(), u->longrun_throughput, u->pf_weight);
+    logger.debug("UE={} with sst={} sd={} in slice sst={} sd={} has spectral efficiency={}, MCS={}, longrun throughput={} and PF weight={}", u->crnti, u->s_nssai.sst, u->s_nssai.sd, s_nssai.sst, s_nssai.sd, u->mcs_description.get_spectral_efficiency(), u->mcs_value.value(), u->longrun_throughput, u->pf_weight);
   }
 
   // First schedule re-transmissions.
@@ -433,12 +430,7 @@ void scheduler_time_rr::dl_sched(ue_pdsch_allocator&          pdsch_alloc,
     }
     // Update longrun_throughput
     // TODO is pending_dl_newtx_bytes() the right call here?
-    u->longrun_throughput = (1 - ALPHA) * u->longrun_throughput + ALPHA * u->pending_dl_newtx_bytes();
-    // DEBUG: print pending DL newtx bytes
-    logger.debug("UE={} with sst={} sd={} in slice sst={} sd={} has pending DL newtx bytes={}", u->crnti, u->s_nssai.sst, u->s_nssai.sd, s_nssai.sst, s_nssai.sd, u->pending_dl_newtx_bytes());
-
-    //DEBUG: print longrun_throughput
-    logger.debug("UE={} with sst={} sd={} in slice sst={} sd={} has updated longrun throughput={}", u->crnti, u->s_nssai.sst, u->s_nssai.sd, s_nssai.sst, s_nssai.sd, u->longrun_throughput);
+    u->longrun_throughput = (1 - ALPHA) * u->longrun_throughput + ALPHA * u->theoretical_throughput;
   }
   
   // Then, schedule new transmissions.
@@ -457,7 +449,7 @@ void scheduler_time_rr::dl_sched(ue_pdsch_allocator&          pdsch_alloc,
     }
     // Update longrun_throughput
     // TODO is pending_dl_newtx_bytes() the right call here?
-    u->longrun_throughput = (1 - ALPHA) * u->longrun_throughput + ALPHA * u->pending_dl_newtx_bytes();
+    u->longrun_throughput = (1 - ALPHA) * u->longrun_throughput + ALPHA * u->theoretical_throughput;
   }
 
 }
