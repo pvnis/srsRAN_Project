@@ -777,6 +777,13 @@ void ue_configuration::update(const cell_common_configuration_list& common_cells
   // Update UE logical channels.
   if (cfg_req.lc_config_list.has_value()) {
     lc_list = cfg_req.lc_config_list.value();
+    // Copy NSSAi from lc_config_list
+    for(auto lc : lc_list) {
+      if(lc.lcid < LCID_MIN_DRB) {
+        continue;
+      }
+      this->s_nssai = lc.s_nssai;
+    }
   }
 
   // Update UE dedicated cell configs.
