@@ -32,11 +32,13 @@ scheduler_metrics_handler::scheduler_metrics_handler(msecs                      
 
 void scheduler_metrics_handler::handle_ue_creation(du_ue_index_t ue_index,
                                                    rnti_t        rnti,
+                                                   s_nssai_t     nssai,
                                                    pci_t         pcell_pci,
                                                    unsigned      num_prbs)
 {
   ues.emplace(ue_index);
   ues[ue_index].rnti     = rnti;
+  ues[ue_index].nssai     = nssai;
   ues[ue_index].ue_index = ue_index;
   ues[ue_index].pci      = pcell_pci;
   ues[ue_index].nof_prbs = num_prbs;
@@ -227,6 +229,8 @@ scheduler_metrics_handler::ue_metric_context::compute_report(std::chrono::millis
   scheduler_ue_metrics ret{};
   ret.pci           = pci;
   ret.rnti          = rnti;
+  ret.nssai.sst     = nssai.sst;
+  ret.nssai.sd      = nssai.sd;
   ret.cqi           = last_cqi;
   ret.ri            = last_ri;
   uint8_t mcs       = data.nof_dl_cws > 0 ? std::roundf(static_cast<float>(data.dl_mcs) / data.nof_dl_cws) : 0;

@@ -47,6 +47,7 @@ public:
   bool valid() const { return next_ded_cfg != nullptr; }
 
   du_ue_index_t           get_ue_index() const { return ue_index; }
+  s_nssai_t               get_nssai() const { return next_ded_cfg->s_nssai; }
   const ue_configuration& next_config() const { return *next_ded_cfg; }
   optional<bool>          get_fallback_command() const { return set_fallback_mode; }
 

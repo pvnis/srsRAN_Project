@@ -201,6 +201,7 @@ public:
 
   const du_ue_index_t ue_index;
   const rnti_t        crnti;
+  s_nssai_t     s_nssai;
 
   /// Retrieve parameters set at the application level for the UEs instantiated in the gNB.
   const scheduler_ue_expert_config& expert_cfg() const { return pcell_common_cfg().expert_cfg.ue; }

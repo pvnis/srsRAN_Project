@@ -26,6 +26,7 @@
 #include "srsran/ran/pci.h"
 #include "srsran/ran/rnti.h"
 #include "srsran/ran/sch/sch_mcs.h"
+#include "srsran/ran/s_nssai.h"
 
 namespace srsran {
 
@@ -50,6 +51,7 @@ struct scheduler_ue_metrics {
   unsigned      ul_nof_nok;
   unsigned      bsr;
   unsigned      dl_bs;
+  s_nssai_t     nssai;
 };
 
 /// \brief Notifier interface used by scheduler to report UE metrics.
