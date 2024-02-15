@@ -132,7 +132,7 @@ grant_prbs_mcs ue_cell::required_dl_prbs(const pdsch_time_domain_resource_alloca
   nof_prbs = std::max(std::min(nof_prbs, ue_cfg->rrm_cfg().pdsch_grant_size_limits.stop()),
                       ue_cfg->rrm_cfg().pdsch_grant_size_limits.start());
 
-  return grant_prbs_mcs{mcs.value(), nof_prbs};
+  return grant_prbs_mcs{mcs.value(), nof_prbs, mcs_config};
 }
 
 grant_prbs_mcs ue_cell::required_ul_prbs(const pusch_time_domain_resource_allocation& pusch_td_cfg,

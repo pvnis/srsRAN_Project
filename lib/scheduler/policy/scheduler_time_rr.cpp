@@ -155,7 +155,7 @@ static alloc_outcome alloc_dl_ue(const ue&                    u,
       // Saving the MCS in the UE database for further use in scheduler. 
       // u.mcs_value = mcs_prbs.mcs;
       // u.mcs_table = mcs_prbs.mcs_table;
-      // u.mcs_description = mcs_prbs.mcs_description;
+      //u.mcs_description = mcs_prbs.mcs_description;
 
       if (mcs_prbs.n_prbs == 0) {
         logger.debug("ue={} rnti={} PDSCH allocation skipped. Cause: UE's CQI=0 ", ue_cc.ue_index, ue_cc.rnti());
@@ -406,16 +406,15 @@ void scheduler_time_rr::dl_sched(ue_pdsch_allocator&          pdsch_alloc,
     u->pf_weight = u->mcs_description.get_spectral_efficiency() / u->longrun_throughput;
   }
 
-  // DEBUG: print UE spectral efficiency, longrun throughput and PF weight
-  for (auto u : ues_slice) {
-    logger.debug("UE={} with sst={} sd={} in slice sst={} sd={} has spectral efficiency={}, longrun throughput={} and PF weight={}", u->crnti, u->s_nssai.sst, u->s_nssai.sd, s_nssai.sst, s_nssai.sd, u->mcs_description.get_spectral_efficiency(), u->longrun_throughput, u->pf_weight);
-    logger.debug("modulation: {} and target code rate: {}", u->mcs_description.modulation, u->mcs_description.target_code_rate);
-  }
-
   // Order UE sub-list (only UEs in our slice) by PF metric
   std::sort(ues_slice.begin(), ues_slice.end(), [](const std::shared_ptr<ue>& a, const std::shared_ptr<ue>& b) {
     return a->pf_weight < b->pf_weight;
   });
+
+  // DEBUG: print UE spectral efficiency, longrun throughput and PF weight
+  for (auto u : ues_slice) {
+    logger.debug("UE={} with sst={} sd={} in slice sst={} sd={} has spectral efficiency={}, longrun throughput={} and PF weight={}", u->crnti, u->s_nssai.sst, u->s_nssai.sd, s_nssai.sst, s_nssai.sd, u->mcs_description.get_spectral_efficiency(), u->longrun_throughput, u->pf_weight);
+  }
 
   // First schedule re-transmissions.
   for (auto u : ues_slice) {
