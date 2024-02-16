@@ -55,8 +55,8 @@ static std::string scaled_fmt_integer(uint64_t num)
 static void print_header()
 {
   fmt::print("\n");
-  fmt::print("                     -----------------DL-----------------------|------------------UL--------------------\n");
-  fmt::print(" pci rnti sst sd     cqi  ri  mcs  brate   ok  nok  (%)  dl_bs | pusch  mcs  brate   ok  nok  (%)    bsr\n");
+  fmt::print("                      -----------------DL-----------------------|------------------UL--------------------\n");
+  fmt::print(" pci rnti sst     sd  cqi  ri  mcs  brate   ok  nok  (%)  dl_bs | pusch  mcs  brate   ok  nok  (%)    bsr\n");
 }
 
 static std::string float_to_string(float f, int digits, int field_width)
@@ -138,7 +138,11 @@ void metrics_plotter_stdout::report_metrics(span<const scheduler_ue_metrics> ue_
     fmt::print("{:>4}", ue.pci);
     fmt::print("{:>5x}", to_value(ue.rnti));
     fmt::print("{:>4}:", ue.nssai.sst);
-    fmt::print("{}", ue.nssai.sd);
+    if (ue.nssai.sd) {
+      fmt::print("{:06}", *ue.nssai.sd);
+    } else {
+      fmt::print("------");
+    }
     if (!iszero(ue.cqi)) {
       fmt::print("  {:>3}", int(ue.cqi));
     } else {
