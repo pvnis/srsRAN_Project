@@ -204,13 +204,16 @@ void sched_config_manager::handle_ue_config_complete(du_ue_index_t ue_index, std
 {
   if (next_cfg != nullptr) {
     // Creation/Reconfig succeeded.
-
+    // DEBUG
+    logger.debug("raphael sst={} sd={}", next_cfg->s_nssai.sst, next_cfg->s_nssai.sd);
     if (ue_cfg_list[ue_index] == nullptr) {
+      // DEBUG
+      logger.debug("raphael sst={} sd={}", next_cfg->s_nssai.sst, next_cfg->s_nssai.sd);
       // UE creation case.
       metrics_handler.handle_ue_creation(
           ue_index, next_cfg->crnti, next_cfg->s_nssai, next_cfg->pcell_common_cfg().pci, next_cfg->pcell_common_cfg().nof_dl_prbs);
-          // DEBUG
-      logger.debug("raphael sst={} sd={}", next_cfg->s_nssai.sst, next_cfg->s_nssai.sd);
+    } else {
+      logger.debug("raphael else sst={} sd={}", next_cfg->s_nssai.sst, next_cfg->s_nssai.sd);
     }
 
     // Stores new UE config and deletes old config.

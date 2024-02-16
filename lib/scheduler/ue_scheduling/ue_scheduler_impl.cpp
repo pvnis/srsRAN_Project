@@ -78,7 +78,9 @@ void ue_scheduler_impl::run_sched_strategy(slot_point slot_tx, du_cell_index_t c
     // only allocates PDCCHs for the current slot_tx.
     return;
   }
+
   // Poll slices for desired quotas
+  u_int32_t prbs_tot = 0;
   for (const auto& slice : slices) {
     // get sub-list of UE in slice
     std::vector<std::shared_ptr<ue>> ues_slice;
@@ -87,15 +89,37 @@ void ue_scheduler_impl::run_sched_strategy(slot_point slot_tx, du_cell_index_t c
     });
     // Poll
     slice->poll_quota(ues_slice, ue_res_grid_view);
+    // If there are UEs in the slice, allocate at least 2 RBs
+    if (ues_slice.size() > 0) {
+      slice->set_s_nssaiQuota(std::max(slice->get_s_needs(), (u_int32_t) 10));
+    }
     logger.debug("Slice sst={} sd={} needs {} RBs", slice->get_s_nssai().sst, slice->get_s_nssai().sd, slice->get_s_needs());
+    prbs_tot += slice->get_s_needs();
   }
 
-  // Define slice quotas. Look at expert_cfg.max_pdschs_per_slot for the number of RBs to be allocated. 
   // Compute the total available RBs without PDCCH 
   uint32_t nrb = grid.get_carrier_res_grid(subcarrier_spacing::kHz30).nof_rbs() - grid.used_crbs(subcarrier_spacing::kHz30, dl_crb_lims, symbols_lims).count();
   logger.debug("Available RBs {}", nrb);
 
   // Set quotas for each slice
+  // if (prbs_tot <= nrb){
+  //   logger.debug("Total needs: {} RBs, lower than available RBs: {}", prbs_tot, nrb);
+  //   for (const auto& slice : slices) {
+  //     if (slice->get_s_nssai().sst == 0) { // Currently allocating all remaining RBs to the default slice
+  //       slice->set_s_nssaiQuota(slice->get_s_needs() + nrb - prbs_tot);
+  //       logger.debug("Slice sst={} sd={} receiving {} RBs", slice->get_s_nssai().sst, slice->get_s_nssai().sd, nrb - prbs_tot);
+  //     } else {
+  //       slice->set_s_nssaiQuota(slice->get_s_needs());
+  //       logger.debug("Slice sst={} sd={} receiving {} RBs", slice->get_s_nssai().sst, slice->get_s_nssai().sd, slice->get_s_needs());
+  //     }
+  //   }
+  // } else { // Temporary solution, need to implement a better way to distribute the RBs
+  //   logger.debug("Total needs: {} RBs, higher than available RBs: {}", prbs_tot, nrb);
+  //   for (const auto& slice : slices) {
+  //     slice->set_s_nssaiQuota((int) nrb * slice->get_s_needs() / prbs_tot);
+  //     logger.debug("Slice sst={} sd={} receiving {} RBs", slice->get_s_nssai().sst, slice->get_s_nssai().sd, (int) nrb * slice->get_s_needs() / prbs_tot);
+  //   }
+  // }
   for (const auto& slice : slices) {
     slice->set_s_nssaiQuota((int) nrb / slices.size());
     logger.debug("Slice sst={} sd={} receiving {} RBs", slice->get_s_nssai().sst, slice->get_s_nssai().sd, (int) nrb / slices.size());
