@@ -1,0 +1,50 @@
+gnb_id: 531
+
+slicing:
+ - sst: 1
+   sd: 0
+   nrb: 20
+ - sst: 1
+   sd: 1
+   nrb: 30
+   
+amf:
+  addr: 10.43.186.29
+  bind_addr: 10.42.2.7
+
+ru_sdr:
+  device_driver: bladerf
+  device_args: "rx_gain=manual"
+  # clock:
+  # sync:
+  srate: 23.04
+  otw_format: sc16
+  tx_gain: 66
+  rx_gain: 15
+
+cell_cfg:
+  dl_arfcn: 632628
+  band: 78
+  channel_bandwidth_MHz: 20
+  common_scs: 30
+  plmn: "00101"
+  tac: 1
+  pci: 1
+  tdd_ul_dl_cfg:
+    dl_ul_tx_period: 10
+    nof_dl_slots: 6
+    nof_dl_symbols: 7
+    nof_ul_slots: 3
+    nof_ul_symbols: 6
+  nof_antennas_ul: 1
+  nof_antennas_dl: 1
+  pdsch:
+    mcs_table: qam256
+  pusch:
+    mcs_table: qam64
+  pucch:
+    sr_period_ms: 10
+
+log:
+  filename: /tmp/gnb.log
+  all_level: debug
