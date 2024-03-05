@@ -24,6 +24,7 @@
 #include "../policy/scheduler_policy_factory.h"
 #include <string>
 #include "srsran/ran/subcarrier_spacing.h"
+#include "ue_pdsch_param_candidate_searcher.h"
 
 using namespace srsran;
 
@@ -62,11 +63,19 @@ void ue_scheduler_impl::run_sched_strategy(slot_point slot_tx, du_cell_index_t c
   // Print resource grid for debugging purposes.
   uint8_t k0 = 0;
   const cell_slot_resource_grid& grid = ue_res_grid_view.get_pdsch_grid(cell_index,k0);
-  crb_interval dl_crb_lims{0,51};
-  ofdm_symbol_range symbols_lims{1,14};
-  //const crb_bitmap used_crbs = grid.used_crbs(subcarrier_spacing::kHz30, dl_crb_lims, symbols_lims);
-  //logger.debug("cell={}, slot={}: used CRBs befor scheduling: {}", cell_index, slot_tx, used_crbs);
-  logger.debug("cell={}, slot={}: res grid before scheduling: {}", cell_index, slot_tx, grid);
+  crb_interval dl_crb_lims{0,grid.get_carrier_res_grid(subcarrier_spacing::kHz30).nof_rbs()};
+  ofdm_symbol_range symbols_lims{2,14};
+  if (!ue_db.empty()){
+    std::shared_ptr<srsran::ue> ue = *ue_db.begin();
+    for (unsigned i = 0; i != ue->nof_cells(); ++i) {
+      const ue_cell&   ue_cc      = ue->get_cell(to_ue_cell_index(i));
+      const slot_point pdcch_slot = ue_res_grid_view.get_pdcch_slot(ue_cc.cell_index);
+      ue_pdsch_param_candidate_searcher candidates{*ue, to_ue_cell_index(i), false, pdcch_slot};
+      if (candidates.begin() != candidates.end()){
+        symbols_lims = candidates.begin()->pdsch_td_res().symbols;
+      }
+    }
+  }
   
 
   // Update all UEs state.
@@ -79,16 +88,22 @@ void ue_scheduler_impl::run_sched_strategy(slot_point slot_tx, du_cell_index_t c
     return;
   }
 
-  // Define slice quotas. Look at expert_cfg.max_pdschs_per_slot for the number of RBs to be allocated. nof_rbs()
-  uint32_t nrb = grid.get_carrier_res_grid(subcarrier_spacing::kHz30).nof_rbs();
+  // Compute number of RBs available
+  uint32_t nrb = grid.get_carrier_res_grid(subcarrier_spacing::kHz30).nof_rbs() - grid.used_crbs(subcarrier_spacing::kHz30, dl_crb_lims, symbols_lims).count();
   logger.debug("Available RBs {}", nrb);
-  for (const auto& slice : slices) {
-    slice->set_s_nssaiQuota((int) nrb / slices.size());
-    logger.debug("Slice sst={} sd={} receiving {} RBs", slice->get_s_nssai().sst, slice->get_s_nssai().sd, (int) nrb / slices.size());
-  }
+  // for (const auto& slice : slices) {
+  //   slice->set_s_nssaiQuota((int) nrb / slices.size());
+  //   logger.debug("Slice sst={} sd={} receiving {} RBs", slice->get_s_nssai().sst, slice->get_s_nssai().sd, (int) nrb / slices.size());
+  // }
 
   // Run the scheduling strategy for each slice
   for (const auto& slice : slices) {
+    if (slice->get_s_nssai().sst == 0){
+      slice->set_s_nssaiQuota(grid.get_carrier_res_grid(subcarrier_spacing::kHz30).nof_rbs() - grid.used_crbs(subcarrier_spacing::kHz30, dl_crb_lims, symbols_lims).count());
+    } else {
+      slice->set_s_nssaiQuota(slice->get_s_nrb());
+    }
+    logger.debug("Slice sst={} sd={} receiving {} RBs", slice->get_s_nssai().sst, slice->get_s_nssai().sd, slice->get_s_quota());
     
     if (expert_cfg.enable_csi_rs_pdsch_multiplexing or (*cells[cell_index]->cell_res_alloc)[0].result.dl.csi_rs.empty()) {
       slice->dl_sched(ue_alloc, ue_res_grid_view, ue_db);

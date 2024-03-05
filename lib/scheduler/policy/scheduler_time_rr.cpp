@@ -507,20 +507,10 @@ void scheduler_time_rr::ul_sched(ue_pusch_allocator&          pusch_alloc,
     return alloc_ul_ue(u, res_grid, pusch_alloc, false, true, s_nssai, s_quota, logger);
   };
 
-  // Schedule for low latency slices
-  if (s_nssai.ll) {
-    // First schedule UL data re-transmissions.
-    next_ul_ue_index = round_robin_apply(ues, next_ul_ue_index, data_retx_ue_function, s_nssai, s_quota, logger);
-    // Then, schedule all pending SR.
-    next_ul_ue_index = round_robin_apply(ues, next_ul_ue_index, sr_ue_function, s_nssai, s_quota, logger);
-    // Finally, schedule UL data new transmissions.
-    next_ul_ue_index = round_robin_apply(ues, next_ul_ue_index, data_tx_ue_function, s_nssai, s_quota, logger);
-  } else { // Schedule for non-low latency slices
-    // First schedule UL data re-transmissions.
-    next_ul_ue_index = round_robin_apply(ues, next_ul_ue_index, data_retx_ue_function, s_nssai, s_quota, logger);
-    // Then, schedule all pending SR.
-    next_ul_ue_index = round_robin_apply(ues, next_ul_ue_index, sr_ue_function, s_nssai, s_quota, logger);
-    // Finally, schedule UL data new transmissions.
-    next_ul_ue_index = round_robin_apply(ues, next_ul_ue_index, data_tx_ue_function, s_nssai, s_quota, logger);
-  }
+  // First schedule UL data re-transmissions.
+  next_ul_ue_index = round_robin_apply(ues, next_ul_ue_index, data_retx_ue_function, s_nssai, s_quota, logger);
+  // Then, schedule all pending SR.
+  next_ul_ue_index = round_robin_apply(ues, next_ul_ue_index, sr_ue_function, s_nssai, s_quota, logger);
+  // Finally, schedule UL data new transmissions.
+  next_ul_ue_index = round_robin_apply(ues, next_ul_ue_index, data_tx_ue_function, s_nssai, s_quota, logger);
 }

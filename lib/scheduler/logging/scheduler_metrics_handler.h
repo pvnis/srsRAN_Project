@@ -43,7 +43,10 @@ public:
   explicit scheduler_metrics_handler(msecs metrics_report_period, scheduler_ue_metrics_notifier& notifier);
 
   /// \brief Register creation of a UE.
-  void handle_ue_creation(du_ue_index_t ue_index, rnti_t rnti, s_nssai_t s_nssai, pci_t pcell_pci, unsigned num_prbs) override;
+  void handle_ue_creation(du_ue_index_t ue_index, rnti_t rnti, pci_t pcell_pci, unsigned num_prbs) override;
+
+  /// \brief Register update of a UE.
+  void handle_ue_update(du_ue_index_t ue_index, rnti_t rnti, s_nssai_t s_nssai, pci_t pcell_pci, unsigned num_prbs) override;
 
   /// \brief Register removal of a UE.
   void handle_ue_deletion(du_ue_index_t ue_index) override;

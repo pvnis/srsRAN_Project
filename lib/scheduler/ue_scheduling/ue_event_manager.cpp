@@ -182,9 +182,6 @@ void ue_event_manager::handle_ue_reconfiguration(ue_config_update_event ev)
     ue_db[ue_idx].handle_reconfiguration_request(ue_reconf_command{ev.next_config()});
     ue_db[ue_idx].s_nssai = ev.get_nssai(); // TODO: find a better way to store nssai
 
-    // DEBUG
-    logger.debug("raphael3 sst={} sd={}", ue_db[ue_idx].s_nssai.sst, ue_db[ue_idx].s_nssai.sd);
-
     // Log event.
     ev_logger.enqueue(scheduler_event_logger::ue_reconf_event{ue_idx, ue_db[ue_idx].crnti});
   });

@@ -82,9 +82,6 @@ void scheduler_impl::handle_ue_reconfiguration_request(const sched_ue_reconfigur
     return;
   }
 
-  // DEBUG
-  logger.debug("raphael2 sst={} sd={}", ue_cfg_ev.get_nssai().sst, ue_cfg_ev.get_nssai().sd);
-
   // Dispatch UE reconfiguration to UE scheduler associated to the cell group.
   du_cell_group_index_t grp_idx = cfg_mng.get_cell_group_index(ue_request.ue_index);
   srsran_assert(grp_idx != INVALID_DU_CELL_GROUP_INDEX, "UE={} not yet created", ue_request.ue_index);

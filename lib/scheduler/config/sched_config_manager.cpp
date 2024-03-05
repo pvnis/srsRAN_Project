@@ -173,8 +173,6 @@ ue_config_update_event sched_config_manager::update_ue(const sched_ue_reconfigur
   // Apply the delta config.
   next_ded_cfg->update(added_cells, cfg_req.cfg);
 
-  logger.debug("raphael1 sd = {} sst = {}", next_ded_cfg->s_nssai.sd, next_ded_cfg->s_nssai.sst);
-
   // Return RAII event.
   return ue_config_update_event{cfg_req.ue_index, *this, std::move(next_ded_cfg)};
 }
@@ -204,13 +202,14 @@ void sched_config_manager::handle_ue_config_complete(du_ue_index_t ue_index, std
 {
   if (next_cfg != nullptr) {
     // Creation/Reconfig succeeded.
-
     if (ue_cfg_list[ue_index] == nullptr) {
       // UE creation case.
       metrics_handler.handle_ue_creation(
+          ue_index, next_cfg->crnti, next_cfg->pcell_common_cfg().pci, next_cfg->pcell_common_cfg().nof_dl_prbs);
+    } else {
+      // Update UE nssai
+      metrics_handler.handle_ue_update(
           ue_index, next_cfg->crnti, next_cfg->s_nssai, next_cfg->pcell_common_cfg().pci, next_cfg->pcell_common_cfg().nof_dl_prbs);
-          // DEBUG
-      logger.debug("raphael sst={} sd={}", next_cfg->s_nssai.sst, next_cfg->s_nssai.sd);
     }
 
     // Stores new UE config and deletes old config.

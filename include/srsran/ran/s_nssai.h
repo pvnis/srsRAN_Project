@@ -30,7 +30,7 @@ namespace srsran {
 struct s_nssai_t {
   uint8_t            sst = 0; // Slice/Service type (max 8bits)
   optional<uint32_t> sd;      // Slice Differentiator (max 24bits)
-  bool               ll = 0;  // Indicates whether the slice is for low latency or not
+  uint16_t           nrb = 0; // Number of RB allocated to the slice (max 275)
 };
 
 } // namespace srsran

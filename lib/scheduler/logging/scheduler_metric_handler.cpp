@@ -32,6 +32,19 @@ scheduler_metrics_handler::scheduler_metrics_handler(msecs                      
 
 void scheduler_metrics_handler::handle_ue_creation(du_ue_index_t ue_index,
                                                    rnti_t        rnti,
+                                                   pci_t         pcell_pci,
+                                                   unsigned      num_prbs)
+{
+  ues.emplace(ue_index);
+  ues[ue_index].rnti     = rnti;
+  ues[ue_index].ue_index = ue_index;
+  ues[ue_index].pci      = pcell_pci;
+  ues[ue_index].nof_prbs = num_prbs;
+  rnti_to_ue_index_lookup.emplace(rnti, ue_index);
+}
+
+void scheduler_metrics_handler::handle_ue_update(du_ue_index_t ue_index,
+                                                   rnti_t        rnti,
                                                    s_nssai_t     nssai,
                                                    pci_t         pcell_pci,
                                                    unsigned      num_prbs)

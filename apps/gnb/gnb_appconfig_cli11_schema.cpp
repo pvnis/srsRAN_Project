@@ -231,6 +231,7 @@ static void configure_cli11_slicing_args(CLI::App& app, s_nssai_t& slice_params)
   app.add_option("--sd", slice_params.sd, "Service Differentiator")
       ->capture_default_str()
       ->check(CLI::Range(0, 0xffffff));
+  app.add_option("--nrb", slice_params.nrb, "Number of RB allocated to the slice")->capture_default_str()->check(CLI::Range(0, 275));
 }
 
 static void configure_cli11_amf_args(CLI::App& app, amf_appconfig& amf_params)
