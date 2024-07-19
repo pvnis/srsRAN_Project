@@ -26,8 +26,8 @@
 #include "srsran/asn1/asn1_utils.h"
 #include "srsran/asn1/rrc_nr/common.h"
 #include "srsran/asn1/rrc_nr/dl_dcch_msg.h"
-#include "srsran/asn1/rrc_nr/rrc_nr.h"
-#include "srsran/asn1/rrc_nr/ul_dcch_msg.h"
+#include "srsran/asn1/rrc_nr/meas_timing_cfg.h"
+#include "srsran/asn1/rrc_nr/ul_dcch_msg_ies.h"
 #include "srsran/ran/subcarrier_spacing.h"
 #include "srsran/rrc/meas_types.h"
 #include "srsran/srslog/srslog.h"
@@ -45,22 +45,28 @@ inline rrc_ssb_mtc asn1_to_ssb_mtc(const asn1::rrc_nr::ssb_mtc_s& asn1_ssb_mtc)
   // periodicity and offset
   switch (asn1_ssb_mtc.periodicity_and_offset.type()) {
     case asn1::rrc_nr::ssb_mtc_s::periodicity_and_offset_c_::types_opts::options::sf5:
-      ssb_mtc.periodicity_and_offset.sf5 = asn1_ssb_mtc.periodicity_and_offset.sf5();
+      ssb_mtc.periodicity_and_offset.periodicity = rrc_periodicity_and_offset::periodicity_t::sf5;
+      ssb_mtc.periodicity_and_offset.offset      = asn1_ssb_mtc.periodicity_and_offset.sf5();
       break;
     case asn1::rrc_nr::ssb_mtc_s::periodicity_and_offset_c_::types_opts::options::sf10:
-      ssb_mtc.periodicity_and_offset.sf10 = asn1_ssb_mtc.periodicity_and_offset.sf10();
+      ssb_mtc.periodicity_and_offset.periodicity = rrc_periodicity_and_offset::periodicity_t::sf10;
+      ssb_mtc.periodicity_and_offset.offset      = asn1_ssb_mtc.periodicity_and_offset.sf10();
       break;
     case asn1::rrc_nr::ssb_mtc_s::periodicity_and_offset_c_::types_opts::options::sf20:
-      ssb_mtc.periodicity_and_offset.sf20 = asn1_ssb_mtc.periodicity_and_offset.sf20();
+      ssb_mtc.periodicity_and_offset.periodicity = rrc_periodicity_and_offset::periodicity_t::sf20;
+      ssb_mtc.periodicity_and_offset.offset      = asn1_ssb_mtc.periodicity_and_offset.sf20();
       break;
     case asn1::rrc_nr::ssb_mtc_s::periodicity_and_offset_c_::types_opts::options::sf40:
-      ssb_mtc.periodicity_and_offset.sf40 = asn1_ssb_mtc.periodicity_and_offset.sf40();
+      ssb_mtc.periodicity_and_offset.periodicity = rrc_periodicity_and_offset::periodicity_t::sf40;
+      ssb_mtc.periodicity_and_offset.offset      = asn1_ssb_mtc.periodicity_and_offset.sf40();
       break;
     case asn1::rrc_nr::ssb_mtc_s::periodicity_and_offset_c_::types_opts::options::sf80:
-      ssb_mtc.periodicity_and_offset.sf80 = asn1_ssb_mtc.periodicity_and_offset.sf80();
+      ssb_mtc.periodicity_and_offset.periodicity = rrc_periodicity_and_offset::periodicity_t::sf80;
+      ssb_mtc.periodicity_and_offset.offset      = asn1_ssb_mtc.periodicity_and_offset.sf80();
       break;
     case asn1::rrc_nr::ssb_mtc_s::periodicity_and_offset_c_::types_opts::options::sf160:
-      ssb_mtc.periodicity_and_offset.sf160 = asn1_ssb_mtc.periodicity_and_offset.sf160();
+      ssb_mtc.periodicity_and_offset.periodicity = rrc_periodicity_and_offset::periodicity_t::sf160;
+      ssb_mtc.periodicity_and_offset.offset      = asn1_ssb_mtc.periodicity_and_offset.sf160();
       break;
     default:
       srslog::fetch_basic_logger("RRC").error("Invalid SSB MTC configuration.");
@@ -175,26 +181,33 @@ inline asn1::rrc_nr::ssb_mtc_s ssb_mtc_to_rrc_asn1(rrc_ssb_mtc ssb_mtc)
 {
   asn1::rrc_nr::ssb_mtc_s asn1_ssb_mtc;
 
-  if (ssb_mtc.periodicity_and_offset.sf5.has_value()) {
-    asn1_ssb_mtc.periodicity_and_offset.set_sf5();
-    asn1_ssb_mtc.periodicity_and_offset.sf5() = ssb_mtc.periodicity_and_offset.sf5.value();
-  } else if (ssb_mtc.periodicity_and_offset.sf10.has_value()) {
-    asn1_ssb_mtc.periodicity_and_offset.set_sf10();
-    asn1_ssb_mtc.periodicity_and_offset.sf10() = ssb_mtc.periodicity_and_offset.sf10.value();
-  } else if (ssb_mtc.periodicity_and_offset.sf20.has_value()) {
-    asn1_ssb_mtc.periodicity_and_offset.set_sf20();
-    asn1_ssb_mtc.periodicity_and_offset.sf20() = ssb_mtc.periodicity_and_offset.sf20.value();
-  } else if (ssb_mtc.periodicity_and_offset.sf40.has_value()) {
-    asn1_ssb_mtc.periodicity_and_offset.set_sf40();
-    asn1_ssb_mtc.periodicity_and_offset.sf40() = ssb_mtc.periodicity_and_offset.sf40.value();
-  } else if (ssb_mtc.periodicity_and_offset.sf80.has_value()) {
-    asn1_ssb_mtc.periodicity_and_offset.set_sf10();
-    asn1_ssb_mtc.periodicity_and_offset.sf80() = ssb_mtc.periodicity_and_offset.sf80.value();
-  } else if (ssb_mtc.periodicity_and_offset.sf160.has_value()) {
-    asn1_ssb_mtc.periodicity_and_offset.set_sf160();
-    asn1_ssb_mtc.periodicity_and_offset.sf160() = ssb_mtc.periodicity_and_offset.sf160.value();
-  } else {
-    report_fatal_error("Cannot convert SSB MTC to ASN.1 type");
+  switch ((uint8_t)ssb_mtc.periodicity_and_offset.periodicity) {
+    case 5:
+      asn1_ssb_mtc.periodicity_and_offset.set_sf5();
+      asn1_ssb_mtc.periodicity_and_offset.sf5() = ssb_mtc.periodicity_and_offset.offset;
+      break;
+    case 10:
+      asn1_ssb_mtc.periodicity_and_offset.set_sf10();
+      asn1_ssb_mtc.periodicity_and_offset.sf10() = ssb_mtc.periodicity_and_offset.offset;
+      break;
+    case 20:
+      asn1_ssb_mtc.periodicity_and_offset.set_sf20();
+      asn1_ssb_mtc.periodicity_and_offset.sf20() = ssb_mtc.periodicity_and_offset.offset;
+      break;
+    case 40:
+      asn1_ssb_mtc.periodicity_and_offset.set_sf40();
+      asn1_ssb_mtc.periodicity_and_offset.sf40() = ssb_mtc.periodicity_and_offset.offset;
+      break;
+    case 80:
+      asn1_ssb_mtc.periodicity_and_offset.set_sf80();
+      asn1_ssb_mtc.periodicity_and_offset.sf80() = ssb_mtc.periodicity_and_offset.offset;
+      break;
+    case 160:
+      asn1_ssb_mtc.periodicity_and_offset.set_sf160();
+      asn1_ssb_mtc.periodicity_and_offset.sf160() = ssb_mtc.periodicity_and_offset.offset;
+      break;
+    default:
+      report_fatal_error("Cannot convert SSB MTC to ASN.1 type");
   }
 
   asn1::number_to_enum(asn1_ssb_mtc.dur, ssb_mtc.dur);
@@ -772,6 +785,13 @@ inline asn1::rrc_nr::nr_rs_type_e rrc_nr_rs_type_to_asn1(const rrc_nr_rs_type& r
   return asn1_rs_type;
 }
 
+inline asn1::rrc_nr::report_interv_e report_interval_to_asn1(uint32_t report_interval)
+{
+  asn1::rrc_nr::report_interv_e asn1_report_interval;
+
+  return asn1_report_interval;
+}
+
 inline asn1::rrc_nr::periodical_report_cfg_s
 periodical_report_cfg_to_rrc_asn1(const rrc_periodical_report_cfg& periodical_report_cfg)
 {
@@ -779,8 +799,13 @@ periodical_report_cfg_to_rrc_asn1(const rrc_periodical_report_cfg& periodical_re
 
   // rs type
   asn1_periodical_report_cfg.rs_type = rrc_nr_rs_type_to_asn1(periodical_report_cfg.rs_type);
-  // report interv
-  asn1::number_to_enum(asn1_periodical_report_cfg.report_interv, periodical_report_cfg.report_interv);
+  // report interv. This struct mixes ms and minutes so we need to convert the value before conversion
+  if (periodical_report_cfg.report_interv < 60000) {
+    asn1::number_to_enum(asn1_periodical_report_cfg.report_interv, periodical_report_cfg.report_interv);
+  } else {
+    asn1::number_to_enum(asn1_periodical_report_cfg.report_interv, periodical_report_cfg.report_interv / 60000);
+  }
+
   // report amount
   asn1::number_to_enum(asn1_periodical_report_cfg.report_amount, periodical_report_cfg.report_amount);
   // report quant cell
@@ -916,7 +941,12 @@ event_triggered_report_cfg_to_rrc_asn1(const rrc_event_trigger_cfg& event_trigge
   asn1_event_triggered_cfg.rs_type = rrc_nr_rs_type_to_asn1(event_triggered_cfg.rs_type);
 
   // report interv
-  asn1::number_to_enum(asn1_event_triggered_cfg.report_interv, event_triggered_cfg.report_interv);
+  // report interv. This struct mixes ms and minutes so we need to convert the value before conversion
+  if (event_triggered_cfg.report_interv < 60000) {
+    asn1::number_to_enum(asn1_event_triggered_cfg.report_interv, event_triggered_cfg.report_interv);
+  } else {
+    asn1::number_to_enum(asn1_event_triggered_cfg.report_interv, event_triggered_cfg.report_interv / 60000);
+  }
 
   // report amount
   asn1::number_to_enum(asn1_event_triggered_cfg.report_amount, event_triggered_cfg.report_amount);
@@ -1240,7 +1270,8 @@ inline rrc_meas_result_nr asn1_to_meas_result_nr(const asn1::rrc_nr::meas_result
   return meas_result_nr;
 };
 
-inline rrc_meas_results asn1_to_measurement_results(const asn1::rrc_nr::meas_results_s& asn1_meas_results)
+inline rrc_meas_results asn1_to_measurement_results(const asn1::rrc_nr::meas_results_s& asn1_meas_results,
+                                                    srslog::basic_logger&               logger)
 {
   rrc_meas_results meas_results;
 
@@ -1277,8 +1308,8 @@ inline rrc_meas_results asn1_to_measurement_results(const asn1::rrc_nr::meas_res
       }
     } else {
       // error
-      report_fatal_error("Invalid meas result neigh cells type = {}.",
-                         asn1_meas_results.meas_result_neigh_cells.type());
+      logger.error("Ignoring neighbor cell measurement. Cause: Unsupported cell type {}",
+                   asn1_meas_results.meas_result_neigh_cells.type().to_string());
     }
 
     meas_results.meas_result_neigh_cells = meas_result_neigh_cell;

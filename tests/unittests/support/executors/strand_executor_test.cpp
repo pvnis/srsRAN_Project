@@ -35,18 +35,27 @@ void run_count_test(task_executor&       strand,
                     unsigned             nof_producers,
                     const WaitCondition& wait_tasks_to_run)
 {
+  srslog::init();
+
   ASSERT_EQ(total_increments % nof_producers, 0);
   const unsigned increments_per_producer = total_increments / nof_producers;
 
   std::vector<unsigned> result;
 
-  unsigned unsync_count   = 0;
-  auto     inc_count_task = [&unsync_count, &result]() { result.push_back(unsync_count++); };
+  unsigned              unsync_count = 0;
+  std::atomic<unsigned> sync_finished{0};
+  auto                  inc_count_task      = [&unsync_count, &result]() { result.push_back(unsync_count++); };
+  auto                  last_inc_count_task = [&unsync_count, &result, &sync_finished]() {
+    result.push_back(unsync_count++);
+    sync_finished++;
+    fmt::print("Strand {} finished\n", unsync_count - 1);
+  };
 
-  auto push_increments = [&strand, &inc_count_task, increments_per_producer]() {
-    for (unsigned i = 0; i != increments_per_producer; ++i) {
+  auto push_increments = [&strand, &inc_count_task, increments_per_producer, last_inc_count_task]() {
+    for (unsigned i = 0; i != increments_per_producer - 1; ++i) {
       ASSERT_TRUE(strand.defer(inc_count_task));
     }
+    ASSERT_TRUE(strand.defer(last_inc_count_task));
   };
 
   std::vector<unique_thread> pushers;
@@ -58,13 +67,17 @@ void run_count_test(task_executor&       strand,
     t.join();
   }
 
-  wait_tasks_to_run();
+  while (sync_finished.load() != nof_producers) {
+    wait_tasks_to_run();
+  }
 
   std::vector<unsigned> expected(total_increments);
   std::iota(expected.begin(), expected.end(), 0);
 
   ASSERT_TRUE(std::equal(result.begin(), result.end(), expected.begin(), expected.end())) << fmt::format(
       "Sizes={}, {}. Result: {}", result.size(), expected.size(), fmt::join(result.begin(), result.end(), ", "));
+
+  wait_tasks_to_run();
 }
 
 TEST(strand_executor_test, dispatch_to_single_worker_causes_no_race_conditions)
@@ -75,7 +88,7 @@ TEST(strand_executor_test, dispatch_to_single_worker_causes_no_race_conditions)
   task_worker w{"WORKER", nof_increments};
   auto        worker_exec = make_task_executor(w);
   auto        strand_exec =
-      make_strand_executor_ptr<concurrent_queue_policy::lockfree_mpmc>(std::move(worker_exec), nof_increments);
+      make_task_strand_ptr<concurrent_queue_policy::lockfree_mpmc>(std::move(worker_exec), nof_increments);
 
   run_count_test(*strand_exec, nof_increments, nof_pushers, [&w]() { w.wait_pending_tasks(); });
 }
@@ -87,9 +100,9 @@ TEST(strand_executor_test, dispatch_to_worker_pool_causes_no_race_conditions)
   static const unsigned nof_pushers    = 4;
 
   task_worker_pool<concurrent_queue_policy::lockfree_mpmc> pool{
-      nof_workers, nof_increments, "POOL", std::chrono::microseconds{100}};
+      "POOL", nof_workers, nof_increments, std::chrono::microseconds{100}};
   auto pool_exec   = task_worker_pool_executor<concurrent_queue_policy::lockfree_mpmc>(pool);
-  auto strand_exec = make_strand_executor_ptr<concurrent_queue_policy::lockfree_mpmc>(pool_exec, nof_increments);
+  auto strand_exec = make_task_strand_ptr<concurrent_queue_policy::lockfree_mpmc>(pool_exec, nof_increments);
 
   run_count_test(*strand_exec, nof_increments, nof_pushers, [&pool]() { pool.wait_pending_tasks(); });
 }
@@ -100,7 +113,7 @@ TEST(strand_executor_test, execute_inside_worker_runs_inline)
 
   task_worker w{"WORKER", 256};
   auto        worker_exec = make_task_executor(w);
-  auto        strand_exec = make_strand_executor_ptr<concurrent_queue_policy::lockfree_mpmc>(worker_exec, 4);
+  auto        strand_exec = make_task_strand_ptr<concurrent_queue_policy::lockfree_mpmc>(worker_exec, 4);
 
   unsigned count = 0;
   w.push_task_blocking([&strand_exec, &count]() {
@@ -123,12 +136,16 @@ TEST(strand_executor_test, multi_priorities_in_strand)
   static const unsigned                qsize       = 16;
   static const std::array<unsigned, 2> qsizes      = {16, 16};
 
+  // Instantiate worker pool.
   task_worker_pool<concurrent_queue_policy::lockfree_mpmc> pool{
-      nof_workers, qsize, "POOL", std::chrono::microseconds{100}};
+      "POOL", nof_workers, qsize, std::chrono::microseconds{100}};
   auto pool_exec = task_worker_pool_executor<concurrent_queue_policy::lockfree_mpmc>(pool);
-  std::vector<std::unique_ptr<task_executor>> strand_execs =
-      make_strand_executor_ptrs<concurrent_queue_policy::lockfree_mpmc, concurrent_queue_policy::lockfree_spsc>(
-          pool_exec, qsizes);
+
+  // Instantiate strands.
+  std::vector<concurrent_queue_params>        qparams      = {{concurrent_queue_policy::lockfree_mpmc, qsizes[0]},
+                                                              {concurrent_queue_policy::lockfree_mpmc, qsizes[1]}};
+  auto                                        strand       = make_priority_task_strand_ptr(pool_exec, qparams);
+  std::vector<std::unique_ptr<task_executor>> strand_execs = make_priority_task_executor_ptrs(strand.get());
 
   concurrent_queue<enqueue_priority, concurrent_queue_policy::lockfree_mpmc, concurrent_queue_wait_policy::sleep>
       order_of_tasks(10);

@@ -24,6 +24,7 @@
 #include "srsran/ran/bs_channel_bandwidth.h"
 #include "srsran/ran/cyclic_prefix.h"
 #include "srsran/ran/slot_point.h"
+#include "srsran/srslog/srslog.h"
 #include "srsran/support/benchmark_utils.h"
 #include <getopt.h>
 #include <random>
@@ -45,7 +46,7 @@ static void usage(const char* prog)
 {
   fmt::print("Usage: {} [-R repetitions] [-T compression type] [-F factory type] [-s silent]\n", prog);
   fmt::print("\t-R Repetitions [Default {}]\n", nof_repetitions);
-  fmt::print("\t-T Type of compression [{'none', 'bfp'}, default is {}]\n", method);
+  fmt::print("\t-T Type of compression [{{'none', 'bfp'}}, default is {}]\n", method);
   fmt::print("\t-F Select compression factory [Default {}]\n", impl_type);
   fmt::print("\t-B Channel bandwidth [Default {}]\n", bw);
   fmt::print("\t-C Subcarrier spacing. [Default {}]\n", to_string(scs));

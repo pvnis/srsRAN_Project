@@ -24,13 +24,14 @@
 
 #include "srsran/adt/optional.h"
 #include "srsran/cu_cp/cu_cp_types.h"
-#include "srsran/ran/cause.h"
+#include "srsran/ran/cause/f1ap_cause.h"
 #include "srsran/ran/crit_diagnostics.h"
 #include "srsran/ran/gnb_du_id.h"
 #include "srsran/ran/nr_cgi.h"
 #include "srsran/ran/pci.h"
 #include <cstdint>
 #include <string>
+#include <variant>
 #include <vector>
 
 namespace srsran {
@@ -45,8 +46,8 @@ struct du_setup_request {
 };
 
 struct f1ap_cells_to_be_activ_list_item {
-  nr_cell_global_id_t nr_cgi;
-  optional<pci_t>     nr_pci;
+  nr_cell_global_id_t  nr_cgi;
+  std::optional<pci_t> nr_pci;
 };
 
 /// Result of a DU setup request operation.
@@ -57,14 +58,20 @@ struct du_setup_result {
     uint8_t                                       gnb_cu_rrc_version;
   };
   struct rejected {
-    cause_t     cause;
-    std::string cause_str;
+    f1ap_cause_t cause;
+    std::string  cause_str;
   };
 
-  variant<accepted, rejected> result;
+  std::variant<accepted, rejected> result;
 
   /// Whether the DU setup request was accepted by the CU-CP.
-  bool is_accepted() const { return variant_holds_alternative<accepted>(result); }
+  bool is_accepted() const { return std::holds_alternative<accepted>(result); }
+};
+
+struct du_config_update_request {
+  gnb_du_id_t                             gnb_du_id;
+  std::vector<cu_cp_du_served_cells_item> served_cells_to_add;
+  std::vector<nr_cell_global_id_t>        served_cells_to_rem;
 };
 
 /// \brief Interface used to handle F1AP interface management procedures as defined in TS 38.473 section 8.2.

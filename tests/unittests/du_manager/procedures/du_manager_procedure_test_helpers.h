@@ -23,7 +23,8 @@
 #pragma once
 
 #include "../du_manager_test_helpers.h"
-#include "srsran/mac/config/mac_cell_group_config_factory.h"
+#include "lib/du_manager/du_ue/du_ue.h"
+#include "lib/du_manager/du_ue/du_ue_manager_repository.h"
 #include "srsran/support/async/fifo_async_task_scheduler.h"
 
 namespace srsran {
@@ -32,9 +33,9 @@ namespace srs_du {
 class du_ue_dummy : public du_ue, public mac_ue_radio_link_notifier, public rlc_tx_upper_layer_control_notifier
 {
 public:
-  bool                    ue_notifiers_disconnected = false;
-  optional<du_ue_index_t> last_rlf_ue_index;
-  optional<rlf_cause>     last_rlf_cause;
+  bool                         ue_notifiers_disconnected = false;
+  std::optional<du_ue_index_t> last_rlf_ue_index;
+  std::optional<rlf_cause>     last_rlf_cause;
 
   du_ue_dummy(const du_ue_context&         ctx_,
               ue_ran_resource_configurator resources_,
@@ -45,9 +46,14 @@ public:
 
   fifo_async_task_scheduler* ue_ctrl_loop;
 
-  async_task<void> disconnect_notifiers() override
+  async_task<void> handle_traffic_stop_request() override
   {
     ue_notifiers_disconnected = true;
+    return launch_no_op_task();
+  }
+  async_task<void> handle_activity_stop_request() override { return launch_no_op_task(); }
+  async_task<void> handle_drb_traffic_stop_request(span<const drb_id_t> /*unused*/) override
+  {
     return launch_no_op_task();
   }
   void schedule_async_task(async_task<void> task) override { ue_ctrl_loop->schedule(std::move(task)); }

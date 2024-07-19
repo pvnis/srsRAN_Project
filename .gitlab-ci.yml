@@ -25,16 +25,16 @@
 
 include:
   - project: softwareradiosystems/ci/tools
-    ref: "17"
+    ref: "20"
     file: .gitlab/ci-shared/setup/all.yml
   - project: softwareradiosystems/ci/tools
-    ref: "17"
+    ref: "20"
     file: .gitlab/ci-shared/features/all.yml
   - project: softwareradiosystems/ci/tools
-    ref: "17"
+    ref: "20"
     file: .gitlab/ci-shared/tools/python.yml
   - project: softwareradiosystems/ci/tools
-    ref: "17"
+    ref: "20"
     file: .gitlab/ci-shared/tools/test_reporter.yml
   - local: .gitlab/ci/builders/version.yml
   - local: .gitlab/ci/build.yml
@@ -58,13 +58,14 @@ variables:
   SLACK_CHANNEL_OK: "#ci_gnb"
   SLACK_CHANNEL_FAIL: "#ci_gnb"
   SLACK_CHANNEL_INFO_MSG: "#ci_gnb_verbose"
-  AUTOREBASER_MODE: minimal
+  AUTOREBASER_PRS_IN_QUEUE: 1
 
 ################################################################################
 ## CI
 ################################################################################
 job cleaner:
   extends: .job cleaner
+  timeout: 4h
   rules:
     - if: $CI_DESCRIPTION =~ /Nightly Build Unit Tests/
 
@@ -84,6 +85,7 @@ trigger builder:
           - .gitlab/ci/src_cache.yml
           - .gitlab/ci/builders.yml
           - .gitlab/ci/builders/**/*
+          - docker/scripts/**/*
   trigger:
     include: .gitlab/ci/builders.yml
     strategy: depend
@@ -97,13 +99,32 @@ trigger docker:
           - .gitlab/ci/docker.yml
           - docker/**/*.{yml,env,json,toml,py,sh,csv,py,toml}
           - docker/**/Dockerfile
-          - scripts/srsran_performance
           - .gdbinit
+    - if: $CI_DESCRIPTION =~ /Nightly Build Unit Tests/
+      variables:
+        CI_DESCRIPTION: $CI_DESCRIPTION
+    - if: $CI_DESCRIPTION =~ /Weekly/
+      variables:
+        CI_DESCRIPTION: $CI_DESCRIPTION
   trigger:
     include: .gitlab/ci/docker.yml
     strategy: depend
   variables:
     PY_DIR: docker/metrics_server
+
+helm:
+  stage: ci
+  rules:
+    - if: $CI_DESCRIPTION =~ /Weekly/
+      variables:
+        CI_DESCRIPTION: Synchronization with srsGNB
+        NOTIFY_SLACK: "true"
+  trigger:
+    project: softwareradiosystems/ci/srsgnb_k8s
+    branch: main
+  needs:
+    - job: trigger docker
+      artifacts: false
 
 ################################################################################
 ## Static
@@ -160,6 +181,7 @@ full-code-format:
     KUBERNETES_CPU_LIMIT: 6
     KUBERNETES_MEMORY_REQUEST: 12Gi
     KUBERNETES_MEMORY_LIMIT: 12Gi
+    CHECK_PER_FILE_TIMEOUT: 600
   before_script:
     - |
       echo "
@@ -180,7 +202,21 @@ full-code-format:
       cd build || exit
       cmake -DASSERT_LEVEL=PARANOID -DAUTO_DETECT_ISA=False -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DBUILD_TESTS=False ..
       make srsran_build_info # needed to generate hashes.h
+    - |
+      monitor_child_process() {
+          while true; do
+              ps -eo comm,pid,etimes | grep ${ANALYZER} | while read comm pid etimes; do
+                  if [ $etimes -gt $CHECK_PER_FILE_TIMEOUT ]; then
+                      echo "Killing child analysis process"
+                      kill $pid
+                  fi
+              done
+              sleep 30
+          done
+      }
+      export -f monitor_child_process
   script:
+    - nohup bash -c monitor_child_process &
     - static-analyzer.sh -i /tmp/codechecker_skip --jobs ${KUBERNETES_CPU_REQUEST} --analyzers ${ANALYZER} ${ANALYZER_ARGS} $CI_PROJECT_DIR
   after_script:
     - mv codechecker_html codechecker-${ANALYZER}-html
@@ -191,7 +227,6 @@ full-code-format:
       - codechecker-${ANALYZER}-html${ARTIFACT_EXTRA_PATH}
     when: always
     expire_in: 10 minutes
-  timeout: 8 hours # clangsa is slow
 
 clang-tidy:
   extends: .codechecker
@@ -211,6 +246,7 @@ cppcheck:
   rules:
     - if: $CI_DESCRIPTION =~ /Nightly Build Unit Tests/
   interruptible: false
+  retry: 2
   variables:
     ANALYZER: cppcheck
     ANALYZER_ARGS: --cppcheck-max-template-recursion 5
@@ -231,16 +267,17 @@ clangsa:
   variables:
     ANALYZER: clangsa
     ANALYZER_ARGS: --ctu
+  timeout: 8 hours
 
 .coverity_base:
   image: $CR_REGISTRY_URI/coverity_image/2022.6.0:1.0.0
   stage: static
   needs: []
   variables:
-    KUBERNETES_CPU_REQUEST: 7
-    KUBERNETES_CPU_LIMIT: 7
-    KUBERNETES_MEMORY_REQUEST: 13Gi
-    KUBERNETES_MEMORY_LIMIT: 13Gi
+    KUBERNETES_CPU_REQUEST: 6
+    KUBERNETES_CPU_LIMIT: 6
+    KUBERNETES_MEMORY_REQUEST: 12Gi
+    KUBERNETES_MEMORY_LIMIT: 12Gi
   tags:
     - ${AMD64_TAG}
   interruptible: false
@@ -354,7 +391,10 @@ unit coverage:
     expire_in: 10 minutes
   retry: 2
   needs:
-    - job: intermediate commits
+    - job: intermediate commits cached
+      optional: true
+      artifacts: true
+    - job: intermediate commits clean
       optional: true
       artifacts: true
     - job: smoke release update cache
@@ -384,7 +424,7 @@ pages:
     - mv coverage_html public/
     - mv codechecker*html public/
     - mv docs/index.html public/index.html
-    - .gitlab/ci/builders/install_dependencies.sh
+    - docker/scripts/install_dependencies.sh
     - apt-get update && apt-get install -y --no-install-recommends rsync
     - |
       rm -Rf build
@@ -452,7 +492,7 @@ disable current schedule:
     - if: $CI_DESCRIPTION =~ /Alternative OSs/
       when: always
     - if: $CI_DESCRIPTION =~ /Weekly/
-      when: always                  
+      when: always
   interruptible: false
   variables:
     ENABLE: "false"

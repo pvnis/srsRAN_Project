@@ -38,19 +38,29 @@ public:
     /// LCID of the MAC CE.
     lcid_dl_sch_t ce_lcid;
     /// Holds payload of CE except UE Contention Resolution Identity.
-    variant<ta_cmd_ce_payload, dummy_ce_payload> ce_payload;
+    std::variant<ta_cmd_ce_payload, dummy_ce_payload> ce_payload;
   };
 
   dl_logical_channel_manager();
 
   /// \brief Activate/Deactivate Bearer.
-  void set_status(lcid_t lcid, bool active) { channels[lcid].active = active; }
+  void set_status(lcid_t lcid, bool active)
+  {
+    srsran_sanity_check(lcid < MAX_NOF_RB_LCIDS, "Max LCID value 32 exceeded");
+    channels[lcid].active = active;
+  }
 
   /// \brief Update the configurations of the provided lists of bearers.
   void configure(span<const logical_channel_config> log_channels_configs);
 
   /// \brief Verifies if logical channel is activated for DL.
-  bool is_active(lcid_t lcid) const { return channels[lcid].active; }
+  bool is_active(lcid_t lcid) const
+  {
+    if (lcid > LCID_MAX_DRB) {
+      return false;
+    }
+    return channels[lcid].active;
+  }
 
   /// \brief Checks whether the UE has pending data.
   /// \remark Excludes data for SRB0.
@@ -65,11 +75,7 @@ public:
   bool has_pending_bytes(lcid_t lcid) const { return pending_bytes(lcid) > 0; }
 
   /// \brief Checks whether a ConRes CE is pending for transmission.
-  /// \remark ConRes CE is only sent when there is pending data for SRB0 or SRB1.
-  bool is_con_res_id_pending() const
-  {
-    return (pending_con_res_id and (has_pending_bytes(LCID_SRB0) or has_pending_bytes(LCID_SRB1)));
-  }
+  bool is_con_res_id_pending() const { return pending_con_res_id; }
 
   /// \brief Checks whether UE has pending CEs to be scheduled (ConRes excluded).
   bool has_pending_ces() const { return not pending_ces.empty(); }
@@ -86,7 +92,7 @@ public:
     return bytes;
   }
 
-  /// \brief Checks whether UE has pending CEs to be scheduled.
+  /// \brief Returns the UE pending CEs' bytes to be scheduled, if any.
   unsigned pending_ce_bytes() const
   {
     unsigned bytes = pending_ue_con_res_id_ce_bytes();
@@ -113,6 +119,7 @@ public:
   /// \brief Update DL buffer status for a given LCID.
   void handle_dl_buffer_status_indication(lcid_t lcid, unsigned buffer_status)
   {
+    srsran_sanity_check(lcid < MAX_NOF_RB_LCIDS, "Max LCID value 32 exceeded");
     channels[lcid].buf_st = buffer_status;
   }
 
@@ -129,7 +136,7 @@ public:
   /// \brief Allocates highest priority MAC SDU within space of \c rem_bytes bytes. Updates \c lch_info with allocated
   /// bytes for the MAC SDU (no MAC subheader).
   /// \return Allocated bytes for MAC SDU (with subheader).
-  unsigned allocate_mac_sdu(dl_msg_lc_info& lch_info, unsigned rem_bytes);
+  unsigned allocate_mac_sdu(dl_msg_lc_info& lch_info, unsigned rem_bytes, lcid_t lcid = INVALID_LCID);
 
   /// \brief Allocates next MAC CE within space of \c rem_bytes bytes. Updates \c lch_info with allocated bytes for the
   /// MAC CE.
@@ -167,8 +174,13 @@ private:
 /// \param[in] tb_info TB on which MAC subPDUs will be stored.
 /// \param[in] lch_mng UE DL logical channel manager.
 /// \param[in] total_tbs available space in bytes for subPDUs.
+/// \param[in] lcid if provided, LCID of the logical channel to be allocated. Otherwise, the LCID with higher priority
+/// is chosen.
 /// \return Total number of bytes allocated (including MAC subheaders).
-unsigned allocate_mac_sdus(dl_msg_tb_info& tb_info, dl_logical_channel_manager& lch_mng, unsigned total_tbs);
+unsigned allocate_mac_sdus(dl_msg_tb_info&             tb_info,
+                           dl_logical_channel_manager& lch_mng,
+                           unsigned                    total_tbs,
+                           lcid_t                      lcid = INVALID_LCID);
 
 /// \brief Allocate MAC subPDUs for pending MAC CEs.
 /// \param[in] tb_info TB on which MAC subPDUs will be stored.

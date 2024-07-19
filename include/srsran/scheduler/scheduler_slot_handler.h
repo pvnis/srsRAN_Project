@@ -68,8 +68,14 @@ struct pdsch_precoding_info {
   static_vector<prg_info, precoding_constants::MAX_NOF_PRG> prg_infos;
 };
 
+/// Transmit power information associated with PDCCH PDU.
 struct tx_power_pdcch_information {
-  // TODO
+  /// Ratio of NZP CSI-RS EPRE to SSB/PBCH block EPRE. See 3GPP TS 38.214, clause 5.2.2.3.1. Values {-3, 0, 3, 6} dB.
+  /// \remark If the UE has not been provided dedicated higher layer parameters, the UE may assume that the ratio of
+  /// PDCCH DMRS EPRE to SSS EPRE is within -8 dB and 8 dB when the UE monitors PDCCHs for a DCI format 1_0 with CRC
+  /// scrambled by SI-RNTI, P-RNTI, or RA-RNTI. See TS 38.213, clause 4.1.
+  /// \remark [Implementation-defined] In case UE is not configured with powerControlOffsetSS we assume it to be 0dB.
+  int8_t pwr_ctrl_offset_ss{0};
 };
 
 struct dmrs_information {
@@ -111,7 +117,7 @@ struct dci_context_information {
   /// Starting symbol of the Search Space.
   unsigned starting_symbol;
   /// Precoding info used for this DCI. This field is empty in case of 1 antenna port.
-  optional<pdcch_precoding_info> precoding_info;
+  std::optional<pdcch_precoding_info> precoding_info;
   /// Transmission power information used for this DCI.
   tx_power_pdcch_information tx_pwr;
   /// Parameter \f$N_{ID}\f$ used for PDCCH DMRS scrambling as per TS38.211, 7.4.1.3.1. Values: {0, ..., 65535}.
@@ -125,7 +131,7 @@ struct dci_context_information {
     /// DCI format string.
     const char* dci_format;
     /// Number of slots the UE is expected to wait before transmitting a DL HARQ-ACK, upon a PDSCH reception.
-    optional<unsigned> harq_feedback_timing;
+    std::optional<unsigned> harq_feedback_timing;
   } context;
 };
 
@@ -162,6 +168,17 @@ struct pdsch_codeword {
   bool new_data;
 };
 
+/// Transmit power information associated with PDSCH PDU.
+struct tx_power_pdsch_information {
+  /// Ratio of PDSCH EPRE to NZP CSI-RS EPRE when UE derives CSI feedback. See 3GPP TS 38.214, clause 5.2.2.3.1. Values
+  /// {-8,...,15} dB with 1 dB step size.
+  /// \remark [Implementation-defined] In case UE is not configured with powerControlOffset we assume it to be 0dB.
+  int8_t pwr_ctrl_offset{0};
+  /// Ratio of NZP CSI-RS EPRE to SSB/PBCH block EPRE. See 3GPP TS 38.214, clause 5.2.2.3.1. Values {-3, 0, 3, 6} dB.
+  /// \remark [Implementation-defined] In case UE is not configured with powerControlOffsetSS we assume it to be 0dB.
+  int8_t pwr_ctrl_offset_ss{0};
+};
+
 /// \brief Information relative to a PDSCH grant in a given slot.
 struct pdsch_information {
   rnti_t                                                 rnti;
@@ -182,7 +199,9 @@ struct pdsch_information {
   /// HARQ process number as per TS38.212 Section 7.3.1.1. Values: {0,...,15}.
   harq_id_t harq_id;
   /// Precoding information for the PDSCH. This field is empty in case of 1-antenna port setups.
-  optional<pdsch_precoding_info> precoding;
+  std::optional<pdsch_precoding_info> precoding;
+  /// Transmit power information for the PDSCH.
+  tx_power_pdsch_information tx_pwr_info;
 };
 
 /// Dummy MAC CE payload.
@@ -201,7 +220,7 @@ struct dl_msg_lc_info {
   /// Number of scheduled bytes for this specific logical channel. {0..65535}.
   unsigned sched_bytes;
   /// Holds payload of CE except UE Contention Resolution Identity.
-  variant<ta_cmd_ce_payload, dummy_ce_payload> ce_payload;
+  std::variant<ta_cmd_ce_payload, dummy_ce_payload> ce_payload;
 };
 
 struct dl_msg_tb_info {
@@ -225,8 +244,10 @@ struct dl_msg_alloc {
     search_space_id ss_id;
     /// Number of times the HARQ process has been retransmitted.
     unsigned nof_retxs;
+    /// Current UE DL buffer occupancy, after this PDSCH grant.
+    unsigned buffer_occupancy;
     /// Offset that the OLLA algorithm applied to the DL MCS candidate to account for channel impairments.
-    optional<float> olla_offset;
+    std::optional<float> olla_offset;
   } context;
 };
 
@@ -306,11 +327,11 @@ struct uci_info {
     uint8_t beta_offset_csi_1 = 13;
     /// \f$\beta^{CSI-2}_{offset}\f$ parameter, as per Section 9.3, TS 38.213.
     /// If set, the CSI report includes CSI Part 2.
-    optional<uint8_t> beta_offset_csi_2;
+    std::optional<uint8_t> beta_offset_csi_2;
   };
 
-  optional<harq_info> harq;
-  optional<csi_info>  csi;
+  std::optional<harq_info> harq;
+  std::optional<csi_info>  csi;
   /// \f$\alpha\f$ parameter, as per Section 6.3.2.4.1.1-3, TS 38.212.
   alpha_scaling_opt alpha;
 };
@@ -350,9 +371,9 @@ struct ssb_information {
 /// Stores the information associated with an SIB1 or other SI allocation.
 struct sib_information {
   enum si_indicator_type { sib1, other_si } si_indicator;
-  optional<uint8_t> si_msg_index;
-  unsigned          nof_txs;
-  pdsch_information pdsch_cfg;
+  std::optional<uint8_t> si_msg_index;
+  unsigned               nof_txs;
+  pdsch_information      pdsch_cfg;
 };
 
 /// See ORAN WG8, 9.2.3.3.12 - Downlink Broadcast Allocation.
@@ -397,9 +418,9 @@ struct csi_rs_info {
   /// \brief ScramblingID of the CSI-RS as per 3GPP TS 38.214, sec 5.2.2.3.1. Values: {0,...,1023}.
   uint16_t scrambling_id;
   /// Ratio of PDSCH EPRE to NZP CSI-RS EPRE as per 3GPP TS 38.214, clause 5.2.2.3.1. Values: {-8,...,15}.
-  int8_t power_ctrl_offset_profile_nr;
+  int8_t power_ctrl_offset;
   /// Ratio of NZP CSI-RS EPRE to SSB/PBCH block EPRE. Values: {-3,0,3,6}.
-  int8_t power_ctrl_offset_ss_profile_nr;
+  int8_t power_ctrl_offset_ss;
 };
 
 struct dl_sched_result {
@@ -429,8 +450,8 @@ struct dl_sched_result {
 };
 
 struct ul_sched_info {
-  pusch_information  pusch_cfg;
-  optional<uci_info> uci;
+  pusch_information       pusch_cfg;
+  std::optional<uci_info> uci;
 
   /// \brief Information relative to a PDSCH allocation decision that is used for the purpose of logging or
   /// tracing, but not passed to the PHY.
@@ -442,9 +463,9 @@ struct ul_sched_info {
     /// Number of times the HARQ process has been retransmitted.
     unsigned nof_retxs;
     /// Delay between PDSCH message with RAR and its corresponding PUSCH.
-    optional<unsigned> msg3_delay;
+    std::optional<unsigned> msg3_delay;
     /// Offset that the OLLA algorithm applied to derive the UL MCS.
-    optional<float> olla_offset;
+    std::optional<float> olla_offset;
   } context;
 };
 
@@ -486,7 +507,7 @@ struct pucch_info {
     pucch_format_4 format_4;
   };
   /// In case the PUCCH will contain CSI bits, this struct contains information how those bits are to be decoded.
-  optional<csi_report_configuration> csi_rep_cfg;
+  std::optional<csi_report_configuration> csi_rep_cfg;
 };
 
 struct ul_sched_result {

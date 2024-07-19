@@ -41,6 +41,9 @@ inline scheduling_request_id uint_to_sched_req_id(unsigned sr_id)
   return static_cast<scheduling_request_id>(sr_id);
 }
 
+/// Maximum SR period in slots.
+constexpr unsigned MAX_SR_PERIOD = 640;
+
 /// Encodes the periodicity (only) of \c periodicityAndOffset for \c SchedulingRequestResourceConfig, TS 38.331. Note
 /// that the offset is encoded separately.
 enum class sr_periodicity : int {
@@ -123,9 +126,9 @@ inline sr_max_tx to_sr_max_tx(unsigned max_tx)
 /// \c SchedulingRequestToAddMod, part of \c SchedulingRequestConfig, TS 38.331.
 struct scheduling_request_to_addmod {
   /// \c schedulingRequestId.
-  scheduling_request_id     sr_id;
-  optional<sr_prohib_timer> prohibit_timer;
-  sr_max_tx                 max_tx;
+  scheduling_request_id          sr_id;
+  std::optional<sr_prohib_timer> prohibit_timer;
+  sr_max_tx                      max_tx;
 
   bool operator==(const scheduling_request_to_addmod& rhs) const
   {

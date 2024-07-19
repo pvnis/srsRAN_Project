@@ -24,6 +24,7 @@
 
 #include "srsran/fapi/slot_data_message_notifier.h"
 #include "srsran/phy/upper/upper_phy_rx_results_notifier.h"
+#include "srsran/srslog/logger.h"
 #include <functional>
 
 namespace srsran {
@@ -50,6 +51,9 @@ public:
   // See interface for documentation.
   void on_new_pucch_results(const ul_pucch_results& result) override;
 
+  // See interface for documentation.
+  void on_new_srs_results(const ul_srs_results& result) override;
+
   /// Configures the FAPI slot-based, data-specific notifier to the given one.
   void set_slot_data_message_notifier(fapi::slot_data_message_notifier& fapi_data_slot_notifier)
   {
@@ -71,6 +75,8 @@ private:
   srslog::basic_logger& logger;
   /// FAPI slot-based, data-specific message notifier.
   std::reference_wrapper<fapi::slot_data_message_notifier> data_notifier;
+  /// dBFS calibration value.
+  const float dBFS_calibration_value = 1;
 };
 
 } // namespace fapi_adaptor

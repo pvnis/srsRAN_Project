@@ -64,11 +64,8 @@ inline crb_interval get_ra_crb_limits(dci_dl_format                     dci_fmt,
 /// \brief Determine CRB limits for PDSCH grant, for the special case of non UE-dedicated allocations (e.g. SIB, RAR,
 /// SRB0).
 ///
-/// \param dci_fmt DL DCI format.
-/// \param init_dl_bwp Initial DL BWP configuration.
-/// \param active_dl_bwp Active DL BWP configuration.
-/// \param ss_cfg SearchSpace configuration.
-/// \param cs_cfg CORESET configuration corresponding to SerachSpace.
+/// \param[in] init_dl_bwp Initial DL BWP configuration.
+/// \param[in] ss_id SearchSpace ID.
 /// \return Calculated CRB limits.
 inline crb_interval get_ra_crb_limits_common(const bwp_downlink_common& init_dl_bwp, search_space_id ss_id)
 {
@@ -78,7 +75,7 @@ inline crb_interval get_ra_crb_limits_common(const bwp_downlink_common& init_dl_
                                                  : init_dl_bwp.pdcch_common.common_coreset.value();
   srsran_assert(
       ss_cfg.is_common_search_space() and
-          variant_get<search_space_configuration::common_dci_format>(ss_cfg.get_monitored_dci_formats()).f0_0_and_f1_0,
+          std::get<search_space_configuration::common_dci_format>(ss_cfg.get_monitored_dci_formats()).f0_0_and_f1_0,
       "Invalid SearchSpace type");
 
   return get_ra_crb_limits(dci_dl_format::f1_0, init_dl_bwp, init_dl_bwp, ss_cfg, cs_cfg);

@@ -33,21 +33,21 @@
       requests: 12
       limits: 12
     memory:
-      requests: "24G"
-      limits: "24G"
+      requests: "20G"
+      limits: "20G"
     ephemeral-storage:
       requests: "6G"
       limits: "6G"
-  taints: ["retina"]
+  taints: ["manual-testing"]
   resources:
     - type: sdr
       model: n3xx
   environment:
     - PATH: ${PATH}:/builds/softwareradiosystems/srsgnb/build/apps/gnb
   shared_files:
-    - local_path: ../../build/apps/gnb/gnb
-      remote_path: /usr/local/bin
-      is_executable: true
+    - local_path: ${GNB_BINARY_PATH}
+      remote_path: ${GNB_REMOTE_PATH}
+      is_executable: ${GNB_IS_EXECUTABLE}
 
 - name: open5gs
   type: 5gc

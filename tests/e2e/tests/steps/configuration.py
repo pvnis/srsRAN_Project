@@ -25,7 +25,7 @@ Configuration related steps
 import logging
 from collections import defaultdict
 from pprint import pformat
-from typing import Optional, Union
+from typing import Optional, Tuple, Union
 
 from retina.client.manager import RetinaTestManager
 from retina.launcher.artifacts import RetinaTestData
@@ -33,6 +33,7 @@ from retina.launcher.public import MetricServerInfo
 
 
 # pylint: disable=too-many-arguments
+# pylint: disable=too-many-locals
 def configure_test_parameters(
     retina_manager: RetinaTestManager,
     retina_data: RetinaTestData,
@@ -42,10 +43,14 @@ def configure_test_parameters(
     sample_rate: Optional[int],
     global_timing_advance: int,
     time_alignment_calibration: Union[int, str],
-    pcap: Optional[bool] = None,
-    gtpu_enable: Optional[bool] = None,
+    n3_enable: Optional[bool] = None,
     common_search_space_enable: bool = False,
     prach_config_index: int = -1,
+    log_ip_level: str = "",
+    noise_spd: int = 0,
+    enable_qos_reestablishment: bool = False,
+    num_cells: int = 1,
+    cell_position_offset: Tuple[float, float, float] = (1000, 0, 0),
 ):
     """
     Configure test parameters
@@ -60,6 +65,10 @@ def configure_test_parameters(
                 "ssb_scs": common_scs,
                 "bandwidth": bandwidth,
                 "global_timing_advance": global_timing_advance,
+                "log_ip_level": log_ip_level,
+                "noise_spd": noise_spd,
+                "num_cells": num_cells,
+                "cell_position_offset": cell_position_offset,
             },
         },
         "gnb": {
@@ -71,13 +80,15 @@ def configure_test_parameters(
                 "time_alignment_calibration": time_alignment_calibration,
                 "common_search_space_enable": common_search_space_enable,
                 "prach_config_index": prach_config_index,
+                "enable_channel_noise": noise_spd != 0,
+                "enable_qos_reestablishment": enable_qos_reestablishment,
+                "num_cells": num_cells,
             },
         },
     }
-    if pcap is not None:
-        retina_data.test_config["gnb"]["parameters"]["pcap"] = pcap
-    if gtpu_enable is not None:
-        retina_data.test_config["gnb"]["parameters"]["gtpu_enable"] = gtpu_enable
+    if n3_enable is not None and n3_enable:
+        retina_data.test_config["gnb"]["parameters"]["pcap"] = True
+        retina_data.test_config["gnb"]["parameters"]["n3_enable"] = True
     if sample_rate is not None:
         retina_data.test_config["ue"]["parameters"]["sample_rate"] = sample_rate
         retina_data.test_config["gnb"]["parameters"]["sample_rate"] = sample_rate

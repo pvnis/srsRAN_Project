@@ -24,19 +24,19 @@
 /// \brief Tests that check the transmission of Paging messages by the DU-high class.
 
 #include "lib/f1ap/common/f1ap_asn1_packer.h"
-#include "tests/integrationtests/du_high/test_utils/du_high_test_bench.h"
+#include "tests/integrationtests/du_high/test_utils/du_high_env_simulator.h"
 #include "tests/unittests/gateways/test_helpers.h"
 #include "srsran/asn1/f1ap/common.h"
 #include "srsran/asn1/f1ap/f1ap_pdu_contents.h"
 #include "srsran/f1ap/common/f1ap_message.h"
-#include "srsran/ran/bcd_helpers.h"
+#include "srsran/ran/bcd_helper.h"
 #include "srsran/support/test_utils.h"
 
 using namespace srsran;
 using namespace srs_du;
 using namespace asn1::f1ap;
 
-class paging_tester : public du_high_test_bench, public testing::Test
+class paging_tester : public du_high_env_simulator, public testing::Test
 {};
 
 f1ap_message generate_paging_message(uint64_t five_g_tmsi, const nr_cell_global_id_t& nr_cgi)
@@ -59,8 +59,8 @@ f1ap_message generate_paging_message(uint64_t five_g_tmsi, const nr_cell_global_
   // Add paging cell list.
   asn1::protocol_ie_single_container_s<asn1::f1ap::paging_cell_item_ies_o> asn1_paging_cell_item_container;
   auto& asn1_paging_cell_item = asn1_paging_cell_item_container->paging_cell_item();
-  asn1_paging_cell_item.nr_cgi.nr_cell_id.from_number(nr_cgi.nci);
-  asn1_paging_cell_item.nr_cgi.plmn_id.from_number(plmn_string_to_bcd(nr_cgi.plmn));
+  asn1_paging_cell_item.nr_cgi.nr_cell_id.from_number(nr_cgi.nci.value());
+  asn1_paging_cell_item.nr_cgi.plmn_id = nr_cgi.plmn_id.to_bytes();
   paging->paging_cell_list.push_back(asn1_paging_cell_item_container);
 
   return msg;
@@ -82,7 +82,7 @@ TEST_F(paging_tester, when_paging_message_is_received_its_relayed_to_ue)
   for (unsigned i = 0; i != MAX_COUNT; ++i) {
     this->run_slot();
 
-    for (const auto& pg_grant : this->phy.cell.last_dl_res->dl_res->paging_grants) {
+    for (const auto& pg_grant : this->phy.cells[0].last_dl_res->dl_res->paging_grants) {
       const auto& pg_ue_it =
           std::find_if(pg_grant.paging_ue_list.begin(), pg_grant.paging_ue_list.end(), [](const paging_ue_info& ue) {
             return ue.paging_type_indicator == srsran::paging_ue_info::cn_ue_paging_identity and

@@ -136,10 +136,10 @@ public:
 class dummy_mac_cell_result_notifier : public mac_cell_result_notifier
 {
 public:
-  optional<mac_dl_sched_result> last_sched_res;
-  optional<mac_dl_data_result>  last_dl_data_res;
-  optional<mac_ul_sched_result> last_ul_res;
-  bool                          is_complete = false;
+  std::optional<mac_dl_sched_result> last_sched_res;
+  std::optional<mac_dl_data_result>  last_dl_data_res;
+  std::optional<mac_ul_sched_result> last_ul_res;
+  bool                               is_complete = false;
 
   void on_new_downlink_scheduler_results(const mac_dl_sched_result& dl_res) override { last_sched_res = dl_res; }
   void on_new_downlink_data(const mac_dl_data_result& dl_data) override { last_dl_data_res = dl_data; }
@@ -163,7 +163,7 @@ public:
 
   size_t on_new_tx_sdu(span<uint8_t> mac_sdu_buf) override
   {
-    previous_tx_sdu = test_rgen::random_vector<uint8_t>(mac_sdu_buf.size());
+    previous_tx_sdu = byte_buffer::create(test_rgen::random_vector<uint8_t>(mac_sdu_buf.size())).value();
     auto out_it     = mac_sdu_buf.begin();
     for (span<const uint8_t> seg : previous_tx_sdu.segments()) {
       out_it = std::copy(seg.begin(), seg.end(), out_it);

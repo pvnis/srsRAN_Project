@@ -42,7 +42,7 @@ static void init_loggers()
   srslog::fetch_basic_logger("RLC").set_level(srslog::basic_levels::info);
   srslog::fetch_basic_logger("DU-MNG").set_level(srslog::basic_levels::debug);
   srslog::fetch_basic_logger("DU-F1").set_level(srslog::basic_levels::debug);
-  srslog::fetch_basic_logger("CU-F1").set_level(srslog::basic_levels::debug);
+  srslog::fetch_basic_logger("CU-CP-F1").set_level(srslog::basic_levels::debug);
   srslog::fetch_basic_logger("CU-CP").set_level(srslog::basic_levels::debug);
   srslog::fetch_basic_logger("RRC").set_level(srslog::basic_levels::debug);
   srslog::fetch_basic_logger("NGAP").set_level(srslog::basic_levels::debug);
@@ -104,10 +104,10 @@ du_high_cu_test_simulator::du_high_cu_test_simulator(const du_high_cu_cp_test_si
   // Prepare CU-CP config.
   srs_cu_cp::cu_cp_configuration cu_cfg;
   cu_cfg.cu_cp_executor            = workers.executors["CU-CP"];
-  cu_cfg.ngap_notifier             = &ngap_amf_notifier;
+  cu_cfg.n2_gw                     = &n2_gw;
   cu_cfg.timers                    = &timers;
   cu_cfg.ngap_config.ran_node_name = "srsgnb01";
-  cu_cfg.ngap_config.plmn          = "00101";
+  cu_cfg.ngap_config.plmn          = plmn_identity::test_value();
   cu_cfg.ngap_config.tac           = 7;
   s_nssai_t slice_cfg;
   slice_cfg.sst = 1;
@@ -168,19 +168,19 @@ void du_high_cu_test_simulator::start_dus()
     // Instantiate DU-high.
     srs_du::du_high_configuration& du_hi_cfg = du_ctxt.du_high_cfg;
     du_hi_cfg.gnb_du_name                    = fmt::format("srsgnb{}", du_idx + 1);
-    du_hi_cfg.gnb_du_id                      = du_idx + 1;
-    du_hi_cfg.du_bind_addr                   = {fmt::format("127.0.0.{}", du_idx + 1)};
-    du_hi_cfg.exec_mapper                    = workers.du_hi_exec_mappers[du_idx].get();
-    du_hi_cfg.f1c_client                     = &f1c_gw;
-    du_hi_cfg.f1u_gw                         = nullptr;
-    du_hi_cfg.phy_adapter                    = &du_ctxt.phy;
-    du_hi_cfg.timers                         = &timers;
-    du_hi_cfg.sched_ue_metrics_notifier      = &du_ctxt.ue_metrics_notifier;
-    du_hi_cfg.cells                          = cfg.dus[du_idx];
-    du_hi_cfg.sched_cfg                      = config_helpers::make_default_scheduler_expert_config();
-    du_hi_cfg.mac_p                          = &du_ctxt.mac_pcap;
-    du_hi_cfg.rlc_p                          = &du_ctxt.rlc_pcap;
-    du_ctxt.du_high_inst                     = make_du_high(du_hi_cfg);
+    du_hi_cfg.gnb_du_id                      = (gnb_du_id_t)(du_idx + 1);
+    du_hi_cfg.du_bind_addr = transport_layer_address::create_from_string(fmt::format("127.0.0.{}", du_idx + 1));
+    du_hi_cfg.exec_mapper  = workers.du_hi_exec_mappers[du_idx].get();
+    du_hi_cfg.f1c_client   = &f1c_gw;
+    du_hi_cfg.f1u_gw       = nullptr;
+    du_hi_cfg.phy_adapter  = &du_ctxt.phy;
+    du_hi_cfg.timers       = &timers;
+    du_hi_cfg.sched_ue_metrics_notifier = &du_ctxt.ue_metrics_notifier;
+    du_hi_cfg.cells                     = cfg.dus[du_idx];
+    du_hi_cfg.sched_cfg                 = config_helpers::make_default_scheduler_expert_config();
+    du_hi_cfg.mac_p                     = &du_ctxt.mac_pcap;
+    du_hi_cfg.rlc_p                     = &du_ctxt.rlc_pcap;
+    du_ctxt.du_high_inst                = make_du_high(du_hi_cfg);
 
     du_ctxt.du_high_inst->start();
   }
@@ -196,8 +196,8 @@ void du_high_cu_test_simulator::run_slot()
 
     // Wait for slot indication to be processed and the l2 results to be sent back to the l1 (in this case, the test
     // main thread).
-    const unsigned                       MAX_COUNT = 1000;
-    const optional<mac_dl_sched_result>& dl_result = dus[i]->phy.cell.last_dl_res;
+    const unsigned                            MAX_COUNT = 1000;
+    const std::optional<mac_dl_sched_result>& dl_result = dus[i]->phy.cells[0].last_dl_res;
     for (unsigned count = 0; count < MAX_COUNT and (not dl_result.has_value() or dl_result->slot != dus[i]->next_slot);
          ++count) {
       // Process tasks dispatched to the test main thread (e.g. L2 slot result)

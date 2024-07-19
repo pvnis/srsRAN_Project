@@ -10,7 +10,7 @@ import logging
 import signal
 import socket
 from contextlib import suppress
-from datetime import datetime
+from datetime import datetime, UTC
 from http.client import RemoteDisconnected
 from queue import Queue
 from threading import Thread
@@ -166,31 +166,19 @@ def _publish_data(
             try:
                 # Currently we only support ue_list metric
                 if "ue_list" in metric:
-                    timestamp = datetime.utcfromtimestamp(metric["timestamp"]).isoformat()
-                    # Number of UEs measurement
-                    _influx_push(
-                        write_api,
-                        bucket=bucket,
-                        record={
-                            "measurement": "ue_count",
-                            "tags": {
-                                "testbed": testbed,
-                            },
-                            "fields": {"value": len(metric["ue_list"])},
-                            "time": timestamp,
-                        },
-                        record_time_key="time",
-                    )
+                    timestamp = datetime.fromtimestamp(metric["timestamp"], UTC).isoformat()
                     # UE Info measurement
                     for ue_info in metric["ue_list"]:
                         ue_container = ue_info["ue_container"]
                         rnti = ue_container.pop("rnti")
+                        pci = ue_container.pop("pci")
                         _influx_push(
                             write_api,
                             bucket=bucket,
                             record={
                                 "measurement": "ue_info",
                                 "tags": {
+                                    "pci": pci,
                                     "rnti": f"{rnti:x}",
                                     "testbed": testbed,
                                 },

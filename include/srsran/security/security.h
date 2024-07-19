@@ -29,13 +29,11 @@
 #include "srsran/adt/optional.h"
 #include "srsran/adt/span.h"
 #include "srsran/ran/pci.h"
+#include "srsran/srslog/srslog.h"
 #include "srsran/support/srsran_assert.h"
 #include "fmt/format.h"
 #include <array>
 #include <cstdint>
-#include <iomanip>
-#include <iostream>
-#include <sstream>
 
 namespace srsran {
 namespace security {
@@ -48,6 +46,9 @@ constexpr uint32_t sec_key_len = 32;
 
 /// Security Key length in bytes (for 128 bit algorithms)
 constexpr uint32_t sec_128_key_len = 16;
+
+/// Maximum PDU length. This should not be smaller than maximum PDCP SDU size (9000).
+constexpr uint32_t sec_max_pdu_size = 9100;
 
 enum class ciphering_algorithm {
   nea0 = 0,
@@ -136,11 +137,11 @@ using supported_algorithms             = std::array<bool, nof_supported_algos>;
 enum class sec_domain { rrc = 0, up = 1 };
 
 struct sec_128_as_config {
-  sec_domain                    domain;
-  optional<sec_128_key>         k_128_int; // Optional in E1AP, see TS 38.463 Sec. 9.4.5
-  sec_128_key                   k_128_enc;
-  optional<integrity_algorithm> integ_algo; // Optional in E1AP, see TS 38.463 Sec. 9.4.5
-  ciphering_algorithm           cipher_algo;
+  sec_domain                         domain;
+  std::optional<sec_128_key>         k_128_int; // Optional in E1AP, see TS 38.463 Sec. 9.4.5
+  sec_128_key                        k_128_enc;
+  std::optional<integrity_algorithm> integ_algo; // Optional in E1AP, see TS 38.463 Sec. 9.4.5
+  ciphering_algorithm                cipher_algo;
 
   bool operator==(const sec_128_as_config& rhs) const
   {
@@ -164,11 +165,11 @@ struct sec_128_as_config {
 };
 
 struct sec_as_config {
-  sec_domain                    domain;
-  optional<sec_key>             k_int; // Optional in E1AP, see TS 38.463 Sec. 9.4.5
-  sec_key                       k_enc;
-  optional<integrity_algorithm> integ_algo; // Optional in E1AP, see TS 38.463 Sec. 9.4.5
-  ciphering_algorithm           cipher_algo;
+  sec_domain                         domain;
+  std::optional<sec_key>             k_int; // Optional in E1AP, see TS 38.463 Sec. 9.4.5
+  sec_key                            k_enc;
+  std::optional<integrity_algorithm> integ_algo; // Optional in E1AP, see TS 38.463 Sec. 9.4.5
+  ciphering_algorithm                cipher_algo;
 };
 
 struct sec_selected_algos {
@@ -219,9 +220,9 @@ struct security_context {
 
   bool select_algorithms(preferred_integrity_algorithms pref_inte_list, preferred_ciphering_algorithms pref_ciph_list);
   void generate_as_keys();
-  sec_as_config     get_as_config(sec_domain domain);
-  sec_128_as_config get_128_as_config(sec_domain domain);
-  void              horizontal_key_derivation(pci_t target_pci, unsigned target_ssb_arfcn);
+  [[nodiscard]] sec_as_config     get_as_config(sec_domain domain) const;
+  [[nodiscard]] sec_128_as_config get_128_as_config(sec_domain domain) const;
+  void                            horizontal_key_derivation(pci_t target_pci, unsigned target_ssb_arfcn);
 };
 
 /******************************************************************************
@@ -244,15 +245,6 @@ inline void zero_tailing_bits(uint8_t& tail_byte, uint8_t length_bits)
 {
   uint8_t bits = (8 - (length_bits & 0x07)) & 0x07;
   tail_byte &= (uint8_t)(0xff << bits);
-}
-
-inline std::string sec_as_key_to_string(const sec_key& key)
-{
-  std::stringstream ss;
-  for (auto val : key) {
-    ss << std::hex << std::setw(2) << std::setfill('0') << (int)val;
-  }
-  return ss.str();
 }
 
 /******************************************************************************
@@ -425,6 +417,54 @@ struct formatter<srsran::security::sec_domain> {
   {
     constexpr static const char* options[] = {"RRC", "UP"};
     return format_to(ctx.out(), "{}", options[static_cast<unsigned>(domain)]);
+  }
+};
+
+// Key formatting
+template <>
+struct formatter<srsran::security::sec_128_key> {
+  template <typename ParseContext>
+  auto parse(ParseContext& ctx) -> decltype(ctx.begin())
+  {
+    return ctx.begin();
+  }
+
+  template <typename FormatContext>
+  auto format(const srsran::security::sec_128_key& key, FormatContext& ctx)
+      -> decltype(std::declval<FormatContext>().out())
+  {
+    return format_to(ctx.out(), "\n\t{:02x}", fmt::join(key, " "));
+  }
+};
+
+template <>
+struct formatter<srsran::security::sec_key> {
+  template <typename ParseContext>
+  auto parse(ParseContext& ctx) -> decltype(ctx.begin())
+  {
+    return ctx.begin();
+  }
+
+  template <typename FormatContext>
+  auto format(const srsran::security::sec_key& key, FormatContext& ctx) -> decltype(std::declval<FormatContext>().out())
+  {
+    format_to(ctx.out(), "\n\t{:02x}", fmt::join(key.begin(), key.begin() + 16, " "));
+    return format_to(ctx.out(), "\n\t{:02x}", fmt::join(key.begin() + 16, key.end(), " "));
+  }
+};
+
+template <>
+struct formatter<srsran::security::sec_mac> {
+  template <typename ParseContext>
+  auto parse(ParseContext& ctx) -> decltype(ctx.begin())
+  {
+    return ctx.begin();
+  }
+
+  template <typename FormatContext>
+  auto format(const srsran::security::sec_mac& mac, FormatContext& ctx) -> decltype(std::declval<FormatContext>().out())
+  {
+    return format_to(ctx.out(), "\n\t{:02x}", fmt::join(mac, " "));
   }
 };
 

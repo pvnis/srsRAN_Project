@@ -32,6 +32,7 @@
 #include "srsran/ofh/transmitter/ofh_transmitter_configuration.h"
 #include "srsran/ran/bs_channel_bandwidth.h"
 #include "srsran/ran/cyclic_prefix.h"
+#include "srsran/srslog/srslog.h"
 #include <string>
 
 namespace srsran {
@@ -54,13 +55,15 @@ struct sector_configuration {
   ether::mac_address mac_dst_address;
   /// Source MAC address, corresponds to the Distributed Unit MAC address.
   ether::mac_address mac_src_address;
-  /// Tag control information field.
-  uint16_t tci;
+  /// Tag control information field for C-Plane.
+  uint16_t tci_cp;
+  /// Tag control information field for U-Plane.
+  uint16_t tci_up;
 
   /// DU transmission window timing parameters.
-  du_tx_window_timing_parameters tx_window_timing_params;
+  tx_window_timing_parameters tx_window_timing_params;
   /// Reception window timing parameters.
-  du_rx_window_timing_parameters rx_window_timing_params;
+  rx_window_timing_parameters rx_window_timing_params;
 
   /// Cyclic prefix.
   cyclic_prefix cp;
@@ -116,7 +119,7 @@ struct sector_configuration {
   /// Indicates if DPDK should be used by the underlying implementation.
   bool uses_dpdk;
   /// Optional TDD configuration.
-  optional<tdd_ul_dl_config_common> tdd_config;
+  std::optional<tdd_ul_dl_config_common> tdd_config;
 };
 
 /// Open Fronthaul sector dependencies.
@@ -125,16 +128,16 @@ struct sector_dependencies {
   srslog::basic_logger* logger = nullptr;
   /// Downlink task executor.
   task_executor* downlink_executor;
-  /// Transmitter task executor.
-  task_executor* transmitter_executor = nullptr;
-  /// Receiver task executor.
-  task_executor* receiver_executor = nullptr;
+  /// Message transmitter and receiver task executor.
+  task_executor* txrx_executor = nullptr;
+  /// Uplink task executor.
+  task_executor* uplink_executor = nullptr;
   /// User-Plane received symbol notifier.
   std::shared_ptr<ofh::uplane_rx_symbol_notifier> notifier;
   /// Optional Ethernet gateway.
-  optional<std::unique_ptr<ether::gateway>> eth_gateway;
-  /// Optional  Ethernet receiver.
-  optional<std::unique_ptr<ether::receiver>> eth_receiver;
+  std::optional<std::unique_ptr<ether::gateway>> eth_gateway;
+  /// Optional Ethernet receiver.
+  std::optional<std::unique_ptr<ether::receiver>> eth_receiver;
 };
 
 } // namespace ofh

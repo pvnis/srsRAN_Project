@@ -23,27 +23,14 @@
 #include "gtpu_test_shared.h"
 #include "lib/gtpu/gtpu_tunnel_logger.h"
 #include "srsran/gtpu/gtpu_echo_factory.h"
-#include "srsran/gtpu/gtpu_tunnel_rx.h"
-#include "srsran/gtpu/gtpu_tunnel_tx.h"
+#include "srsran/gtpu/gtpu_tunnel_common_rx.h"
+#include "srsran/gtpu/gtpu_tunnel_common_tx.h"
 #include <gtest/gtest.h>
-#include <queue>
 #include <sys/socket.h>
 
 using namespace srsran;
 
-class gtpu_tunnel_rx_lower_dummy : public gtpu_tunnel_ngu_rx_lower_layer_notifier
-{
-  void on_new_sdu(byte_buffer sdu, qos_flow_id_t qos_flow_id) final
-  {
-    last_rx             = std::move(sdu);
-    last_rx_qos_flow_id = qos_flow_id;
-  }
-
-public:
-  byte_buffer   last_rx;
-  qos_flow_id_t last_rx_qos_flow_id;
-};
-class gtpu_tunnel_tx_upper_dummy : public gtpu_tunnel_tx_upper_layer_notifier
+class gtpu_tunnel_tx_upper_dummy : public gtpu_tunnel_common_tx_upper_layer_notifier
 {
   void on_new_pdu(byte_buffer buf, const ::sockaddr_storage& dest_addr) final
   {
@@ -56,7 +43,7 @@ public:
   sockaddr_storage last_addr = {};
 };
 
-class gtpu_tunnel_rx_upper_dummy : public gtpu_tunnel_rx_upper_layer_interface
+class gtpu_tunnel_rx_upper_dummy : public gtpu_tunnel_common_rx_upper_layer_interface
 {
 public:
   void handle_pdu(byte_buffer pdu, const sockaddr_storage& src_addr) final
@@ -108,7 +95,6 @@ protected:
   std::unique_ptr<gtpu_echo> echo;
 
   // Surrounding tester
-  gtpu_tunnel_rx_lower_dummy gtpu_rx = {};
   gtpu_tunnel_tx_upper_dummy gtpu_tx = {};
 };
 
@@ -136,14 +122,33 @@ TEST_F(gtpu_echo_test, rx_echo_req_tx_echo_rep)
   echo                           = create_gtpu_echo(msg);
 
   sockaddr_storage orig_addr = {};
-  byte_buffer      echo_req  = {gtpu_echo_request_sn_65535};
+  byte_buffer      echo_req  = byte_buffer::create(gtpu_echo_request_sn_65535).value();
 
-  gtpu_tunnel_rx_upper_layer_interface* rx = echo->get_rx_upper_layer_interface();
+  gtpu_tunnel_common_rx_upper_layer_interface* rx = echo->get_rx_upper_layer_interface();
   rx->handle_pdu(std::move(echo_req), orig_addr);
 
   ASSERT_FALSE(gtpu_tx.last_tx.empty());
-  byte_buffer echo_rep = {gtpu_echo_response_sn_65535};
+  byte_buffer echo_rep = byte_buffer::create(gtpu_echo_response_sn_65535).value();
   ASSERT_EQ(gtpu_tx.last_tx, echo_rep);
+};
+
+/// \brief Test correct reception of an error indication message
+TEST_F(gtpu_echo_test, rx_error_indication)
+{
+  null_dlt_pcap dummy_pcap;
+  // init echo entity
+  gtpu_echo_creation_message msg = {};
+  msg.gtpu_pcap                  = &dummy_pcap;
+  msg.tx_upper                   = &gtpu_tx;
+  echo                           = create_gtpu_echo(msg);
+
+  sockaddr_storage orig_addr        = {};
+  byte_buffer      error_indication = byte_buffer::create(gtpu_error_indication).value();
+
+  gtpu_tunnel_common_rx_upper_layer_interface* rx = echo->get_rx_upper_layer_interface();
+  rx->handle_pdu(std::move(error_indication), orig_addr);
+
+  ASSERT_TRUE(gtpu_tx.last_tx.empty());
 };
 
 int main(int argc, char** argv)

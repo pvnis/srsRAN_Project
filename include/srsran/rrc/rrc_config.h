@@ -23,7 +23,8 @@
 #pragma once
 
 #include "rrc_ue_config.h"
-#include "srsran/adt/optional.h"
+#include "srsran/cu_cp/cu_cp_types.h"
+#include "srsran/ran/gnb_id.h"
 #include "srsran/rrc/rrc_ue_config.h"
 #include <map>
 #include <memory>
@@ -33,6 +34,8 @@ namespace srsran {
 namespace srs_cu_cp {
 
 struct rrc_cfg_t {
+  /// The gNodeB identifier to use for measurement configs.
+  gnb_id_t gnb_id;
   /// PDCP config to use when UE SRB2 are configured.
   srb_pdcp_config srb2_cfg;
   /// Configuration for available 5QI.

@@ -22,11 +22,12 @@ set(SOURCES
         ethernet_factories.cpp
         ethernet_transmitter_impl.cpp
         ethernet_receiver_impl.cpp
+        ethernet_rx_buffer_impl.cpp
         vlan_ethernet_frame_builder_impl.cpp
         vlan_ethernet_frame_decoder_impl.cpp)
 
 add_library(srsran_ofh_ethernet STATIC ${SOURCES})
-target_link_libraries(srsran_ofh_ethernet srslog)
+target_link_libraries(srsran_ofh_ethernet srslog srsran_instrumentation)
 
 if (DPDK_FOUND)
     add_subdirectory(dpdk)

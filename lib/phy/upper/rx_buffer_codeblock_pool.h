@@ -23,7 +23,7 @@
 #pragma once
 
 #include "srsran/adt/bit_buffer.h"
-#include "srsran/adt/concurrent_queue.h"
+#include "srsran/adt/mpmc_queue.h"
 #include "srsran/adt/optional.h"
 #include "srsran/adt/span.h"
 #include "srsran/phy/upper/log_likelihood_ratio.h"
@@ -77,8 +77,8 @@ public:
   }
 
   /// \brief Reserves a codeblock buffer.
-  /// \return The codeblock identifier in the pool if it is reserved successfully. Otherwise, \c nullopt
-  optional<unsigned> reserve()
+  /// \return The codeblock identifier in the pool if it is reserved successfully. Otherwise, \c std::nullopt
+  std::optional<unsigned> reserve()
   {
     // Try to get an available codeblock.
     return free_list.try_pop();

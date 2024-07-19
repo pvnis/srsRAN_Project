@@ -93,9 +93,13 @@ protected:
     }
     ASSERT_NE(dft_factory, nullptr) << "Cannot create DFT factory.";
 
+    std::shared_ptr<time_alignment_estimator_factory> ta_estimator_factory =
+        create_time_alignment_estimator_dft_factory(dft_factory);
+    ASSERT_NE(ta_estimator_factory, nullptr) << "Cannot create TA estimator factory.";
+
     // Create channel estimator factory.
     std::shared_ptr<port_channel_estimator_factory> port_chan_estimator_factory =
-        create_port_channel_estimator_factory_sw(dft_factory);
+        create_port_channel_estimator_factory_sw(ta_estimator_factory);
     ASSERT_NE(port_chan_estimator_factory, nullptr) << "Cannot create port channel estimator factory.";
 
     std::shared_ptr<dmrs_pucch_estimator_factory> estimator_factory =
@@ -103,7 +107,7 @@ protected:
     ASSERT_NE(estimator_factory, nullptr) << "Cannot create DM-RS PUCCH estimator factory.";
 
     // Create factories required by the PUCCH demodulator factory.
-    std::shared_ptr<channel_equalizer_factory> equalizer_factory = create_channel_equalizer_factory_zf();
+    std::shared_ptr<channel_equalizer_factory> equalizer_factory = create_channel_equalizer_generic_factory();
     ASSERT_NE(equalizer_factory, nullptr) << "Cannot create equalizer factory.";
 
     std::shared_ptr<pucch_detector_factory> detector_factory =
@@ -181,11 +185,17 @@ TEST_P(PucchProcessorFormat1Fixture, FromVector)
 
     // Check channel state information.
     // Time alignment shouldn't exceed plus minus 3 us.
-    ASSERT_NEAR(result.csi.get_time_alignment().to_seconds(), 0, 3e-6);
+    std::optional<phy_time_unit> time_aligment = result.csi.get_time_alignment();
+    ASSERT_TRUE(time_aligment.has_value());
+    ASSERT_NEAR(time_aligment.value().to_seconds(), 0, 3e-6);
     // EPRE depends on the number of entries.
-    ASSERT_NEAR(result.csi.get_epre_dB(), convert_power_to_dB(param.entries.size()), 0.09);
+    std::optional<float> epre_dB = result.csi.get_epre_dB();
+    ASSERT_TRUE(epre_dB.has_value());
+    ASSERT_NEAR(epre_dB.value(), convert_power_to_dB(param.entries.size()), 0.09);
     // SINR should be larger than -5 dB.
-    ASSERT_GT(result.csi.get_sinr_dB(), -5.0) << "Entry configuration: " << entry.config;
+    std::optional<float> sinr_dB = result.csi.get_sinr_dB();
+    ASSERT_TRUE(sinr_dB.has_value());
+    ASSERT_GT(sinr_dB.value(), -5.0) << "Entry configuration: " << entry.config;
 
     // The message shall be valid.
     ASSERT_EQ(result.message.get_status(), uci_status::valid);
@@ -226,9 +236,13 @@ TEST_P(PucchProcessorFormat1Fixture, FromVectorFalseCs)
 
   // Check channel state information.
   // EPRE depends on the number of entries.
-  ASSERT_NEAR(result.csi.get_epre_dB(), convert_power_to_dB(param.entries.size()), 0.9);
+  std::optional<float> epre_dB = result.csi.get_epre_dB();
+  ASSERT_TRUE(epre_dB.has_value());
+  ASSERT_NEAR(epre_dB.value(), convert_power_to_dB(param.entries.size()), 0.09);
   // SINR should be less than -25 dB.
-  ASSERT_LT(result.csi.get_sinr_dB(), -25.0);
+  std::optional<float> sinr_dB = result.csi.get_sinr_dB();
+  ASSERT_TRUE(sinr_dB.has_value());
+  ASSERT_LT(sinr_dB.value(), -25.0);
 
   // The message shall be valid.
   ASSERT_EQ(result.message.get_status(), uci_status::invalid);

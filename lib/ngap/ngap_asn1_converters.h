@@ -26,11 +26,13 @@
 #include "srsran/asn1/ngap/ngap_ies.h"
 #include "srsran/cu_cp/cu_cp_types.h"
 #include "srsran/ngap/ngap_handover.h"
-#include "srsran/ran/bcd_helpers.h"
+#include "srsran/ran/bcd_helper.h"
+#include "srsran/ran/cause/ngap_cause.h"
 #include "srsran/ran/cu_types.h"
 #include "srsran/ran/lcid.h"
 #include "srsran/ran/up_transport_layer_info.h"
 #include "srsran/srslog/srslog.h"
+#include <variant>
 
 namespace srsran {
 namespace srs_cu_cp {
@@ -44,6 +46,7 @@ byte_buffer pack_into_pdu(const T& msg, const char* context_name = nullptr)
   asn1::bit_ref bref{pdu};
   if (msg.pack(bref) == asn1::SRSASN_ERROR_ENCODE_FAIL) {
     srslog::fetch_basic_logger("NGAP").error("Failed to pack message in {} - discarding it", context_name);
+    pdu.clear();
   }
   return pdu;
 }
@@ -103,7 +106,7 @@ cu_cp_assoc_qos_flow_to_ngap_assoc_qos_flow_item(cu_cp_associated_qos_flow cu_cp
 /// \param cu_cp_qos_flow_info The CU-CP QoS Flow Per TNL Info.
 /// \return The NGAP QoS Flow Per TNL Info.
 inline asn1::ngap::qos_flow_per_tnl_info_s
-cu_cp_qos_flow_per_tnl_info_to_ngap_qos_flow_per_tnl_info(cu_cp_qos_flow_per_tnl_information cu_cp_qos_flow_info)
+cu_cp_qos_flow_per_tnl_info_to_ngap_qos_flow_per_tnl_info(const cu_cp_qos_flow_per_tnl_information& cu_cp_qos_flow_info)
 {
   asn1::ngap::qos_flow_per_tnl_info_s ngap_qos_flow_info;
 
@@ -119,58 +122,63 @@ cu_cp_qos_flow_per_tnl_info_to_ngap_qos_flow_per_tnl_info(cu_cp_qos_flow_per_tnl
   return ngap_qos_flow_info;
 }
 
-/// \brief Convert \c cause_t type to NGAP cause.
-/// \param cause The cause_t type.
+/// \brief Convert \c ngap_cause_t type to NGAP cause.
+/// \param cause The ngap_cause_t type.
 /// \return The NGAP cause.
-inline asn1::ngap::cause_c cause_to_asn1(cause_t cause)
+inline asn1::ngap::cause_c cause_to_asn1(ngap_cause_t cause)
 {
-  asn1::ngap::cause_c ngap_cause;
+  asn1::ngap::cause_c asn1_cause;
 
-  if (variant_holds_alternative<cause_radio_network_t>(cause)) {
-    ngap_cause.set_radio_network() =
-        static_cast<asn1::ngap::cause_radio_network_opts::options>(variant_get<cause_radio_network_t>(cause));
-  } else if (variant_holds_alternative<cause_transport_t>(cause)) {
-    ngap_cause.set_transport() =
-        static_cast<asn1::ngap::cause_transport_opts::options>(variant_get<cause_transport_t>(cause));
-  } else if (variant_holds_alternative<cause_nas_t>(cause)) {
-    ngap_cause.set_nas() = static_cast<asn1::ngap::cause_nas_opts::options>(variant_get<cause_nas_t>(cause));
-  } else if (variant_holds_alternative<cause_protocol_t>(cause)) {
-    ngap_cause.set_protocol() =
-        static_cast<asn1::ngap::cause_protocol_opts::options>(variant_get<cause_protocol_t>(cause));
-  } else if (variant_holds_alternative<cause_misc_t>(cause)) {
-    ngap_cause.set_misc() = static_cast<asn1::ngap::cause_misc_opts::options>(variant_get<cause_misc_t>(cause));
-  } else {
-    report_fatal_error("Cannot convert cause to NGAP type");
+  if (const auto* result = std::get_if<ngap_cause_radio_network_t>(&cause)) {
+    asn1_cause.set_radio_network() = static_cast<asn1::ngap::cause_radio_network_opts::options>(*result);
+    return asn1_cause;
+  }
+  if (const auto* result = std::get_if<ngap_cause_transport_t>(&cause)) {
+    asn1_cause.set_transport() = static_cast<asn1::ngap::cause_transport_opts::options>(*result);
+    return asn1_cause;
+  }
+  if (const auto* result = std::get_if<cause_nas_t>(&cause)) {
+    asn1_cause.set_nas() = static_cast<asn1::ngap::cause_nas_opts::options>(*result);
+    return asn1_cause;
+  }
+  if (const auto* result = std::get_if<cause_protocol_t>(&cause)) {
+    asn1_cause.set_protocol() = static_cast<asn1::ngap::cause_protocol_opts::options>(*result);
+    return asn1_cause;
+  }
+  if (const auto* result = std::get_if<ngap_cause_misc_t>(&cause)) {
+    asn1_cause.set_misc() = static_cast<asn1::ngap::cause_misc_opts::options>(*result);
+    return asn1_cause;
   }
 
-  return ngap_cause;
+  report_fatal_error("Cannot convert cause to NGAP type:{}", cause);
+  return asn1_cause;
 }
 
-/// \brief Convert NGAP ASN1 cause to \c cause_t type.
-/// \param ngap_cause The ASN1 NGAP cause.
-/// \return The cause_t type.
-inline cause_t asn1_to_cause(asn1::ngap::cause_c ngap_cause)
+/// \brief Convert NGAP ASN1 cause to \c ngap_cause_t type.
+/// \param asn1_cause The ASN1 NGAP cause.
+/// \return The ngap_cause_t type.
+inline ngap_cause_t asn1_to_cause(asn1::ngap::cause_c asn1_cause)
 {
-  cause_t cause;
+  ngap_cause_t cause;
 
-  switch (ngap_cause.type()) {
+  switch (asn1_cause.type()) {
     case asn1::ngap::cause_c::types_opts::radio_network:
-      cause = static_cast<cause_radio_network_t>(ngap_cause.radio_network().value);
+      cause = static_cast<ngap_cause_radio_network_t>(asn1_cause.radio_network().value);
       break;
     case asn1::ngap::cause_c::types_opts::transport:
-      cause = static_cast<cause_transport_t>(ngap_cause.transport().value);
+      cause = static_cast<ngap_cause_transport_t>(asn1_cause.transport().value);
       break;
     case asn1::ngap::cause_c::types_opts::nas:
-      cause = static_cast<cause_nas_t>(ngap_cause.nas().value);
+      cause = static_cast<cause_nas_t>(asn1_cause.nas().value);
       break;
     case asn1::ngap::cause_c::types_opts::protocol:
-      cause = static_cast<cause_protocol_t>(ngap_cause.protocol().value);
+      cause = static_cast<cause_protocol_t>(asn1_cause.protocol().value);
       break;
     case asn1::ngap::cause_c::types_opts::misc:
-      cause = static_cast<cause_misc_t>(ngap_cause.misc().value);
+      cause = static_cast<ngap_cause_misc_t>(asn1_cause.misc().value);
       break;
     default:
-      report_fatal_error("Cannot convert NGAP ASN.1 cause {} to common type", ngap_cause.type());
+      report_fatal_error("Cannot convert NGAP ASN.1 cause {} to common type", asn1_cause.type());
   }
 
   return cause;
@@ -192,9 +200,9 @@ inline asn1::ngap::qos_flow_with_cause_item_s cu_cp_qos_flow_failed_to_setup_ite
 /// \brief Convert CU-CP NRCGI to NR Cell Identity.
 /// \param ngap_cgi The NGAP NRCGI.
 /// \return The NR Cell Identity.
-inline nr_cell_id_t cu_cp_nrcgi_to_nr_cell_identity(asn1::ngap::nr_cgi_s& ngap_cgi)
+inline nr_cell_identity cu_cp_nrcgi_to_nr_cell_identity(asn1::ngap::nr_cgi_s& ngap_cgi)
 {
-  return ngap_cgi.nr_cell_id.to_number();
+  return nr_cell_identity::create(ngap_cgi.nr_cell_id.to_number()).value();
 }
 
 /// \brief Convert CU-CP NRCGI to NR Cell Identity.
@@ -206,10 +214,10 @@ cu_cp_user_location_info_to_asn1(const cu_cp_user_location_info_nr& cu_cp_user_l
   asn1::ngap::user_location_info_nr_s asn1_user_location_info;
 
   // add nr cgi
-  asn1_user_location_info.nr_cgi.nr_cell_id.from_number(cu_cp_user_location_info.nr_cgi.nci);
-  asn1_user_location_info.nr_cgi.plmn_id.from_string(cu_cp_user_location_info.nr_cgi.plmn_hex);
+  asn1_user_location_info.nr_cgi.nr_cell_id.from_number(cu_cp_user_location_info.nr_cgi.nci.value());
+  asn1_user_location_info.nr_cgi.plmn_id = cu_cp_user_location_info.nr_cgi.plmn_id.to_bytes();
   // add tai
-  asn1_user_location_info.tai.plmn_id.from_string(cu_cp_user_location_info.tai.plmn_id);
+  asn1_user_location_info.tai.plmn_id = cu_cp_user_location_info.tai.plmn_id.to_bytes();
   asn1_user_location_info.tai.tac.from_number(cu_cp_user_location_info.tai.tac);
   // add timestamp
   if (cu_cp_user_location_info.time_stamp.has_value()) {
@@ -225,7 +233,7 @@ cu_cp_user_location_info_to_asn1(const cu_cp_user_location_info_nr& cu_cp_user_l
 /// \return The humand-readable string.
 inline std::string asn1_cause_to_string(const asn1::ngap::cause_c& cause)
 {
-  std::string cause_str = "";
+  std::string cause_str;
 
   switch (cause.type()) {
     case asn1::ngap::cause_c::types_opts::radio_network:
@@ -251,13 +259,13 @@ inline std::string asn1_cause_to_string(const asn1::ngap::cause_c& cause)
   return cause_str;
 }
 
-/// \brief Convert common type Initial Context Setup Response message to NGAP Initial Context Setup Response
-/// message.
+/// \brief Convert common type Initial Context Setup Response message to NGAP Initial Context Setup Response message.
 /// \param[out] resp The ASN1 NGAP Initial Context Setup Response message.
 /// \param[in] cu_cp_resp The CU-CP Initial Context Setup Response message.
+/// \return True on success, otherwise false.
 template <typename template_asn1_item>
-inline void pdu_session_res_setup_response_item_to_asn1(template_asn1_item&                             asn1_resp,
-                                                        const cu_cp_pdu_session_res_setup_response_item resp)
+inline bool pdu_session_res_setup_response_item_to_asn1(template_asn1_item&                              asn1_resp,
+                                                        const cu_cp_pdu_session_res_setup_response_item& resp)
 {
   asn1_resp.pdu_session_id = pdu_session_id_to_uint(resp.pdu_session_id);
 
@@ -293,16 +301,21 @@ inline void pdu_session_res_setup_response_item_to_asn1(template_asn1_item&     
   // Pack pdu_session_res_setup_resp_transfer_s
   byte_buffer pdu = pack_into_pdu(response_transfer);
 
-  asn1_resp.pdu_session_res_setup_resp_transfer.resize(pdu.length());
+  if (!asn1_resp.pdu_session_res_setup_resp_transfer.resize(pdu.length())) {
+    return false;
+  }
   std::copy(pdu.begin(), pdu.end(), asn1_resp.pdu_session_res_setup_resp_transfer.begin());
+
+  return true;
 }
 
 /// \brief Convert common type modify response item to ASN1 type message.
 /// \param[out] asn1_resp The ASN1 NGAP struct.
 /// \param[in] resp The common type struct.
+/// \return True on success, otherwise false.
 template <typename template_asn1_item>
-inline void pdu_session_res_modify_response_item_to_asn1(template_asn1_item& asn1_resp,
-                                                         const cu_cp_pdu_session_resource_modify_response_item resp)
+inline bool pdu_session_res_modify_response_item_to_asn1(template_asn1_item& asn1_resp,
+                                                         const cu_cp_pdu_session_resource_modify_response_item& resp)
 {
   asn1_resp.pdu_session_id = pdu_session_id_to_uint(resp.pdu_session_id);
 
@@ -327,16 +340,21 @@ inline void pdu_session_res_modify_response_item_to_asn1(template_asn1_item& asn
   // Pack pdu_session_res_modify_resp_transfer_s
   byte_buffer pdu = pack_into_pdu(response_transfer);
 
-  asn1_resp.pdu_session_res_modify_resp_transfer.resize(pdu.length());
+  if (!asn1_resp.pdu_session_res_modify_resp_transfer.resize(pdu.length())) {
+    return false;
+  }
   std::copy(pdu.begin(), pdu.end(), asn1_resp.pdu_session_res_modify_resp_transfer.begin());
+
+  return true;
 }
 
 /// \brief Convert common type modify response item to ASN1 type message.
 /// \param[out] asn1_resp The ASN1 NGAP struct.
 /// \param[in] resp The common type struct.
+/// \return True on success, otherwise false.
 template <typename template_asn1_item>
-inline void pdu_session_res_failed_to_modify_item_to_asn1(template_asn1_item& asn1_resp,
-                                                          const cu_cp_pdu_session_resource_failed_to_modify_item resp)
+inline bool pdu_session_res_failed_to_modify_item_to_asn1(template_asn1_item& asn1_resp,
+                                                          const cu_cp_pdu_session_resource_failed_to_modify_item& resp)
 {
   asn1_resp.pdu_session_id = pdu_session_id_to_uint(resp.pdu_session_id);
 
@@ -346,17 +364,21 @@ inline void pdu_session_res_failed_to_modify_item_to_asn1(template_asn1_item& as
   // Pack transfer
   byte_buffer pdu = pack_into_pdu(response_transfer);
 
-  asn1_resp.pdu_session_res_modify_unsuccessful_transfer.resize(pdu.length());
+  if (!asn1_resp.pdu_session_res_modify_unsuccessful_transfer.resize(pdu.length())) {
+    return false;
+  }
   std::copy(pdu.begin(), pdu.end(), asn1_resp.pdu_session_res_modify_unsuccessful_transfer.begin());
+
+  return true;
 }
 
-/// \brief Convert common type Initial Context Setup Response message to NGAP Initial Context Setup Response
-/// message.
+/// \brief Convert common type Initial Context Setup Response message to NGAP Initial Context Setup Response message.
 /// \param[out] resp The ASN1 NGAP Initial Context Setup Response message.
 /// \param[in] cu_cp_resp The CU-CP Initial Context Setup Response message.
+/// \return True on success, otherwise false.
 template <typename template_asn1_item>
-inline void pdu_session_res_setup_failed_item_to_asn1(template_asn1_item&                           asn1_resp,
-                                                      const cu_cp_pdu_session_res_setup_failed_item resp)
+inline bool pdu_session_res_setup_failed_item_to_asn1(template_asn1_item&                            asn1_resp,
+                                                      const cu_cp_pdu_session_res_setup_failed_item& resp)
 {
   asn1_resp.pdu_session_id = pdu_session_id_to_uint(resp.pdu_session_id);
 
@@ -368,8 +390,12 @@ inline void pdu_session_res_setup_failed_item_to_asn1(template_asn1_item&       
   // Pack pdu_session_res_setup_unsuccessful_transfer_s
   byte_buffer pdu = pack_into_pdu(setup_unsuccessful_transfer);
 
-  asn1_resp.pdu_session_res_setup_unsuccessful_transfer.resize(pdu.length());
+  if (!asn1_resp.pdu_session_res_setup_unsuccessful_transfer.resize(pdu.length())) {
+    return false;
+  }
   std::copy(pdu.begin(), pdu.end(), asn1_resp.pdu_session_res_setup_unsuccessful_transfer.begin());
+
+  return true;
 }
 
 /// \brief Convert ASN.1 GUAMI to a common type.
@@ -378,7 +404,7 @@ inline void pdu_session_res_setup_failed_item_to_asn1(template_asn1_item&       
 inline guami_t asn1_to_guami(const asn1::ngap::guami_s& asn1_guami)
 {
   guami_t guami;
-  guami.plmn          = asn1_guami.plmn_id.to_string();
+  guami.plmn          = plmn_identity::from_bytes(asn1_guami.plmn_id.to_bytes()).value();
   guami.amf_region_id = asn1_guami.amf_region_id.to_number();
   guami.amf_set_id    = asn1_guami.amf_set_id.to_number();
   guami.amf_pointer   = asn1_guami.amf_pointer.to_number();
@@ -490,7 +516,7 @@ inline asn1::ngap::s_nssai_s s_nssai_to_asn1(const s_nssai_t& s_nssai)
 inline cu_cp_tai ngap_asn1_to_tai(const asn1::ngap::tai_s& asn1_tai)
 {
   cu_cp_tai tai;
-  tai.plmn_id = asn1_tai.plmn_id.to_string();
+  tai.plmn_id = plmn_identity::from_bytes(asn1_tai.plmn_id.to_bytes()).value();
   tai.tac     = asn1_tai.tac.to_number();
 
   return tai;
@@ -519,12 +545,10 @@ inline nr_cell_global_id_t ngap_asn1_to_nr_cgi(const asn1::ngap::nr_cgi_s& asn1_
   nr_cell_global_id_t nr_cgi;
 
   // nr cell id
-  nr_cgi.nci = asn1_nr_cgi.nr_cell_id.to_number();
+  nr_cgi.nci = nr_cell_identity::create(asn1_nr_cgi.nr_cell_id.to_number()).value();
 
   // plmn id
-  nr_cgi.plmn_hex = asn1_nr_cgi.plmn_id.to_string();
-  nr_cgi.plmn     = plmn_bcd_to_string(asn1_nr_cgi.plmn_id.to_number());
-  ngap_plmn_to_mccmnc(asn1_nr_cgi.plmn_id.to_number(), &nr_cgi.mcc, &nr_cgi.mnc);
+  nr_cgi.plmn_id = plmn_identity::from_bytes(asn1_nr_cgi.plmn_id.to_bytes()).value();
 
   return nr_cgi;
 }
@@ -537,10 +561,10 @@ inline asn1::ngap::nr_cgi_s nr_cgi_to_ngap_asn1(const nr_cell_global_id_t& nr_cg
   asn1::ngap::nr_cgi_s asn1_nr_cgi;
 
   // nr cell id
-  asn1_nr_cgi.nr_cell_id.from_number(nr_cgi.nci);
+  asn1_nr_cgi.nr_cell_id.from_number(nr_cgi.nci.value());
 
   // plmn id
-  asn1_nr_cgi.plmn_id.from_string(nr_cgi.plmn_hex);
+  asn1_nr_cgi.plmn_id = nr_cgi.plmn_id.to_bytes();
 
   return asn1_nr_cgi;
 }
@@ -686,10 +710,11 @@ inline cu_cp_global_gnb_id ngap_asn1_to_global_gnb_id(const asn1::ngap::global_g
   cu_cp_global_gnb_id gnb_id;
 
   // plmn id
-  gnb_id.plmn_id = asn1_gnb_id.plmn_id.to_string();
+  gnb_id.plmn_id = plmn_identity::from_bytes(asn1_gnb_id.plmn_id.to_bytes()).value();
 
   // gnb id
-  gnb_id.gnb_id = asn1_gnb_id.gnb_id.gnb_id().to_number();
+  gnb_id.gnb_id.id         = asn1_gnb_id.gnb_id.gnb_id().to_number();
+  gnb_id.gnb_id.bit_length = asn1_gnb_id.gnb_id.gnb_id().length();
 
   return gnb_id;
 }

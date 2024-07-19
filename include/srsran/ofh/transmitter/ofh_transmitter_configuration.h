@@ -31,38 +31,13 @@
 #include "srsran/ofh/ofh_constants.h"
 #include "srsran/ofh/serdes/ofh_cplane_message_builder.h"
 #include "srsran/ofh/serdes/ofh_uplane_message_builder.h"
+#include "srsran/ofh/transmitter/ofh_transmitter_timing_parameters.h"
 #include "srsran/ran/bs_channel_bandwidth.h"
 #include "srsran/ran/cyclic_prefix.h"
 #include "srsran/ran/tdd/tdd_ul_dl_config.h"
 
 namespace srsran {
 namespace ofh {
-
-/// \brief Structure storing the transmission window timing parameters.
-struct du_tx_window_timing_parameters {
-  /// Offset from the current OTA symbol to the start of DL Control-Plane transmission window.
-  std::chrono::microseconds T1a_max_cp_dl;
-  /// Offset from the current OTA symbol to the end of DL Control-Plane transmission window.
-  std::chrono::microseconds T1a_min_cp_dl;
-  /// Offset from the current OTA symbol to the start of UL Control-Plane transmission window.
-  std::chrono::microseconds T1a_max_cp_ul;
-  /// Offset from the current OTA symbol to the end of UL Control-Plane transmission window.
-  std::chrono::microseconds T1a_min_cp_ul;
-  /// Offset from the current OTA symbol to the start of DL User-Plane transmission window.
-  std::chrono::microseconds T1a_max_up;
-  /// Offset from the current OTA symbol to the end of DL User-Plane transmission window.
-  std::chrono::microseconds T1a_min_up;
-};
-
-/// Configuration used by ofh_symbol_handler implementations.
-struct symbol_handler_config {
-  /// Transmission window timing parameters for delay management.
-  du_tx_window_timing_parameters tx_timing_params;
-  /// Number of symbols per slot.
-  unsigned symbols_per_slot;
-  /// Highest subcarrier spacing.
-  subcarrier_spacing scs;
-};
 
 /// Open Fronthaul transmitter configuration.
 struct transmitter_config {
@@ -74,6 +49,8 @@ struct transmitter_config {
   subcarrier_spacing scs;
   /// Cyclic prefix.
   cyclic_prefix cp;
+  /// Transmission window timing parameters.
+  tx_window_timing_parameters tx_timing_params;
   /// Downlink eAxC.
   static_vector<unsigned, MAX_NOF_SUPPORTED_EAXC> dl_eaxc;
   /// Uplink eAxC.
@@ -86,8 +63,10 @@ struct transmitter_config {
   ether::mac_address mac_dst_address;
   /// Source MAC address.
   ether::mac_address mac_src_address;
-  /// Tag control information field.
-  uint16_t tci;
+  /// Tag control information field for C-Plane.
+  uint16_t tci_cp;
+  /// Tag control information field for U-Plane.
+  uint16_t tci_up;
   /// Ethernet interface name or identifier.
   std::string interface;
   /// Promiscuous mode flag.
@@ -96,8 +75,6 @@ struct transmitter_config {
   units::bytes mtu_size;
   /// RU working bandwidth.
   bs_channel_bandwidth_fr1 ru_working_bw;
-  /// Open Fronthaul symbol handler configuration.
-  symbol_handler_config symbol_handler_cfg;
   /// Downlink compression parameters.
   ru_compression_params dl_compr_params;
   /// Uplink compression parameters.
@@ -106,6 +83,8 @@ struct transmitter_config {
   ru_compression_params prach_compr_params;
   /// Downlink static compression header flag.
   bool is_downlink_static_compr_hdr_enabled;
+  /// Uplink static compression header flag.
+  bool is_uplink_static_compr_hdr_enabled;
   /// \brief Downlink broadcast flag.
   ///
   /// If this flag is enabled the same downlink data will be send to all the configured downlink eAxCs.
@@ -115,7 +94,7 @@ struct transmitter_config {
   /// Downlink processing time in microseconds.
   std::chrono::microseconds dl_processing_time;
   /// Optional TDD configuration.
-  optional<tdd_ul_dl_config_common> tdd_config;
+  std::optional<tdd_ul_dl_config_common> tdd_config;
   /// Indicates if DPDK should be used by the underlying implementation.
   bool uses_dpdk;
 };

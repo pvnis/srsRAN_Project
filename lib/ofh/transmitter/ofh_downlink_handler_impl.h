@@ -43,7 +43,7 @@ struct downlink_handler_impl_config {
   /// Downlink eAxCs.
   static_vector<unsigned, MAX_NOF_SUPPORTED_EAXC> dl_eaxc;
   /// Optional TDD configuration.
-  optional<tdd_ul_dl_config_common> tdd_config;
+  std::optional<tdd_ul_dl_config_common> tdd_config;
   /// Cyclic prefix.
   cyclic_prefix cp;
   /// Subcarrier spacing.
@@ -51,7 +51,7 @@ struct downlink_handler_impl_config {
   /// Downlink processing time in microseconds.
   std::chrono::microseconds dl_processing_time;
   /// Transmission window timing parameters for delay management.
-  du_tx_window_timing_parameters tx_timing_params;
+  tx_window_timing_parameters tx_timing_params;
 };
 
 /// Downlink handler implementation dependencies.
@@ -63,7 +63,7 @@ struct downlink_handler_impl_dependencies {
   /// Data flow for User-Plane.
   std::unique_ptr<data_flow_uplane_downlink_data> data_flow_uplane;
   /// Ethernet frame pool.
-  std::shared_ptr<ether::eth_frame_pool> frame_pool_ptr;
+  std::shared_ptr<ether::eth_frame_pool> frame_pool;
 };
 
 /// Open Fronthaul downlink handler implementation.
@@ -85,13 +85,12 @@ private:
   const unsigned                                        sector_id;
   srslog::basic_logger&                                 logger;
   const cyclic_prefix                                   cp;
-  const optional<tdd_ul_dl_config_common>               tdd_config;
+  const std::optional<tdd_ul_dl_config_common>          tdd_config;
   const static_vector<unsigned, MAX_NOF_SUPPORTED_EAXC> dl_eaxc;
   tx_window_checker                                     window_checker;
   std::unique_ptr<data_flow_cplane_scheduling_commands> data_flow_cplane;
   std::unique_ptr<data_flow_uplane_downlink_data>       data_flow_uplane;
-  std::shared_ptr<ether::eth_frame_pool>                frame_pool_ptr;
-  ether::eth_frame_pool&                                frame_pool;
+  std::shared_ptr<ether::eth_frame_pool>                frame_pool;
   std::reference_wrapper<error_notifier>                err_notifier;
 };
 

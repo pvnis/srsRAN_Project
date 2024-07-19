@@ -84,7 +84,13 @@ void pdcp_entity_tx::handle_sdu(byte_buffer buf)
   // We will need a copy of the SDU for the discard timer when using AM
   byte_buffer sdu;
   if (cfg.discard_timer.has_value() && is_am()) {
-    sdu = buf.deep_copy();
+    auto sdu_copy = buf.deep_copy();
+    if (not sdu_copy.has_value()) {
+      logger.log_error("Unable to deep copy SDU");
+      upper_cn.on_protocol_failure();
+      return;
+    }
+    sdu = std::move(sdu_copy.value());
   }
 
   // Perform header compression
@@ -103,7 +109,7 @@ void pdcp_entity_tx::handle_sdu(byte_buffer buf)
 
   // Apply ciphering and integrity protection
   expected<byte_buffer> exp_buf = apply_ciphering_and_integrity_protection(std::move(buf), st.tx_next);
-  if (exp_buf.is_error()) {
+  if (not exp_buf.has_value()) {
     logger.log_error("Could not apply ciphering and integrity protection, dropping SDU and notifying RRC. count={}",
                      st.tx_next);
     upper_cn.on_protocol_failure();
@@ -116,7 +122,7 @@ void pdcp_entity_tx::handle_sdu(byte_buffer buf)
     unique_timer discard_timer = {};
     // Only start for finite durations
     if (cfg.discard_timer.value() != pdcp_discard_timer::infinity) {
-      discard_timer = timers.create_timer();
+      discard_timer = ue_dl_timer_factory.create_timer();
       discard_timer.set(std::chrono::milliseconds(static_cast<unsigned>(cfg.discard_timer.value())),
                         discard_callback{this, st.tx_next});
       discard_timer.run();
@@ -139,7 +145,7 @@ void pdcp_entity_tx::handle_sdu(byte_buffer buf)
   }
 
   // Write to lower layers
-  write_data_pdu_to_lower_layers(st.tx_next, std::move(protected_buf));
+  write_data_pdu_to_lower_layers(st.tx_next, std::move(protected_buf), /* is_retx = */ false);
 
   // Increment TX_NEXT
   st.tx_next++;
@@ -149,6 +155,7 @@ void pdcp_entity_tx::handle_sdu(byte_buffer buf)
 
 void pdcp_entity_tx::reestablish(security::sec_128_as_config sec_cfg_)
 {
+  logger.log_debug("Reestablishing PDCP. st={}", st);
   // - for UM DRBs and AM DRBs, reset the ROHC protocol for uplink and start with an IR state in U-mode (as
   //   defined in RFC 3095 [8] and RFC 4815 [9]) if drb-ContinueROHC is not configured in TS 38.331 [3];
   // - for UM DRBs and AM DRBs, reset the EHC protocol for uplink if drb-ContinueEHC-UL is not configured in
@@ -196,34 +203,38 @@ void pdcp_entity_tx::reestablish(security::sec_128_as_config sec_cfg_)
   if (is_am()) {
     retransmit_all_pdus();
   }
+  logger.log_info("Reestablished PDCP. st={}", st);
 }
 
-void pdcp_entity_tx::write_data_pdu_to_lower_layers(uint32_t count, byte_buffer buf)
+void pdcp_entity_tx::write_data_pdu_to_lower_layers(uint32_t count, byte_buffer buf, bool is_retx)
 {
-  logger.log_info(
-      buf.begin(), buf.end(), "TX PDU. type=data pdu_len={} sn={} count={}", buf.length(), SN(count), count);
+  logger.log_info(buf.begin(),
+                  buf.end(),
+                  "TX PDU. type=data pdu_len={} sn={} count={} is_retx={}",
+                  buf.length(),
+                  SN(count),
+                  count,
+                  is_retx);
   metrics_add_pdus(1, buf.length());
-  pdcp_tx_pdu tx_pdu = {};
-  tx_pdu.buf         = std::move(buf);
-  if (is_drb()) {
-    tx_pdu.pdcp_sn = SN(count); // Set only for data PDUs on DRBs.
-  }
-  lower_dn.on_new_pdu(std::move(tx_pdu));
+  lower_dn.on_new_pdu(std::move(buf), is_retx);
 }
 
 void pdcp_entity_tx::write_control_pdu_to_lower_layers(byte_buffer buf)
 {
   logger.log_info(buf.begin(), buf.end(), "TX PDU. type=ctrl pdu_len={}", buf.length());
   metrics_add_pdus(1, buf.length());
-  pdcp_tx_pdu tx_pdu = {};
-  tx_pdu.buf         = std::move(buf);
-  // tx_pdu.pdcp_sn is not set for control PDUs
-  lower_dn.on_new_pdu(std::move(tx_pdu));
+  lower_dn.on_new_pdu(std::move(buf), /* is_retx = */ false);
 }
 
 void pdcp_entity_tx::handle_status_report(byte_buffer_chain status)
 {
-  byte_buffer buf = {status.begin(), status.end()};
+  auto status_buffer = byte_buffer::create(status.begin(), status.end());
+  if (not status_buffer.has_value()) {
+    logger.log_warning("Unable to allocate byte_buffer");
+    return;
+  }
+
+  byte_buffer buf = std::move(status_buffer.value());
   bit_decoder dec(buf);
 
   // Unpack and check PDU header
@@ -291,7 +302,7 @@ expected<byte_buffer> pdcp_entity_tx::apply_ciphering_and_integrity_protection(b
   // Append MAC-I
   if (is_srb() || (is_drb() && (integrity_enabled == security::integrity_enabled::on))) {
     if (not buf.append(mac)) {
-      return default_error_t{};
+      return make_unexpected(default_error_t{});
     }
   }
 
@@ -333,15 +344,15 @@ void pdcp_entity_tx::integrity_generate(security::sec_mac& mac, byte_buffer_view
   }
 
   logger.log_debug("Integrity gen. count={} bearer_id={} dir={}", count, bearer_id, direction);
-  logger.log_debug((uint8_t*)sec_cfg.k_128_int.value().data(), sec_cfg.k_128_int.value().size(), "Integrity gen key.");
+  logger.log_debug("Integrity gen key: {}", sec_cfg.k_128_int);
   logger.log_debug(buf.begin(), buf.end(), "Integrity gen input message.");
-  logger.log_debug((uint8_t*)mac.data(), mac.size(), "MAC generated.");
+  logger.log_debug("MAC generated: {}", mac);
 }
 
 void pdcp_entity_tx::cipher_encrypt(byte_buffer_view& buf, uint32_t count)
 {
   logger.log_debug("Cipher encrypt. count={} bearer_id={} dir={}", count, bearer_id, direction);
-  logger.log_debug((uint8_t*)sec_cfg.k_128_enc.data(), sec_cfg.k_128_enc.size(), "Cipher encrypt key.");
+  logger.log_debug("Cipher encrypt key: {}", sec_cfg.k_128_enc);
   logger.log_debug(buf.begin(), buf.end(), "Cipher encrypt input msg.");
 
   switch (sec_cfg.cipher_algo) {
@@ -420,7 +431,14 @@ void pdcp_entity_tx::retransmit_all_pdus()
       hdr.sn                   = SN(sdu_info.count);
 
       // Pack header
-      byte_buffer buf = sdu_info.sdu.deep_copy();
+      auto buf_copy = sdu_info.sdu.deep_copy();
+      if (not buf_copy.has_value()) {
+        logger.log_error("Could not deep copy SDU, dropping SDU and notifying RRC. count={} {}", sdu_info.count, st);
+        upper_cn.on_protocol_failure();
+        return;
+      }
+
+      byte_buffer buf = std::move(buf_copy.value());
       if (not write_data_pdu_header(buf, hdr)) {
         logger.log_error(
             "Could not append PDU header, dropping SDU and notifying RRC. count={} {}", sdu_info.count, st);
@@ -433,7 +451,7 @@ void pdcp_entity_tx::retransmit_all_pdus()
 
       // Perform integrity protection and ciphering
       expected<byte_buffer> exp_buf = apply_ciphering_and_integrity_protection(std::move(buf), sdu_info.count);
-      if (exp_buf.is_error()) {
+      if (not exp_buf.has_value()) {
         logger.log_error("Could not apply ciphering and integrity protection during retransmissions, dropping SDU and "
                          "notifying RRC. count={} {}",
                          sdu_info.count,
@@ -443,7 +461,7 @@ void pdcp_entity_tx::retransmit_all_pdus()
       }
 
       byte_buffer protected_buf = std::move(exp_buf.value());
-      write_data_pdu_to_lower_layers(sdu_info.count, std::move(protected_buf));
+      write_data_pdu_to_lower_layers(sdu_info.count, std::move(protected_buf), /* is_retx = */ true);
     }
   }
 }
@@ -460,7 +478,7 @@ void pdcp_entity_tx::handle_transmit_notification(uint32_t notif_sn)
   }
   uint32_t notif_count = notification_count_estimation(notif_sn);
   if (notif_count < st.tx_trans) {
-    logger.log_error(
+    logger.log_info(
         "Invalid notification SN, notif_count is too low. notif_sn={} notif_count={} {}", notif_sn, notif_count, st);
     return;
   }
@@ -503,8 +521,40 @@ void pdcp_entity_tx::handle_delivery_notification(uint32_t notif_sn)
   if (is_am()) {
     stop_discard_timer(notif_count);
   } else {
-    logger.log_warning("Received PDU delivery notification on UM bearer. sn={}", notif_sn);
+    logger.log_error("Ignored unexpected PDU delivery notification in UM bearer. notif_sn={}", notif_sn);
   }
+}
+
+void pdcp_entity_tx::handle_retransmit_notification(uint32_t notif_sn)
+{
+  if (SRSRAN_UNLIKELY(is_srb())) {
+    logger.log_error("Ignored unexpected PDU retransmit notification in SRB. notif_sn={}", notif_sn);
+    return;
+  }
+  if (SRSRAN_UNLIKELY(is_um())) {
+    logger.log_error("Ignored unexpected PDU retransmit notification in UM bearer. notif_sn={}", notif_sn);
+    return;
+  }
+
+  // Nothing to do here
+  logger.log_debug("Ignored handling PDU retransmit notification for notif_sn={}", notif_sn);
+}
+
+void pdcp_entity_tx::handle_delivery_retransmitted_notification(uint32_t notif_sn)
+{
+  if (SRSRAN_UNLIKELY(is_srb())) {
+    logger.log_error("Ignored unexpected PDU delivery retransmitted notification in SRB. notif_sn={}", notif_sn);
+    return;
+  }
+  if (SRSRAN_UNLIKELY(is_um())) {
+    logger.log_error("Ignored unexpected PDU delivery retransmitted notification in UM bearer. notif_sn={}", notif_sn);
+    return;
+  }
+
+  // TODO: Here we can stop discard timers of successfully retransmitted PDUs once they can be distinguished from
+  // origianls (e.g. if they are moved into a separate container upon retransmission).
+  // For now those retransmitted PDUs will be cleaned when handling delivery notification for following originals.
+  logger.log_debug("Ignored handling PDU delivery retransmitted notification for notif_sn={}", notif_sn);
 }
 
 uint32_t pdcp_entity_tx::notification_count_estimation(uint32_t notification_sn)

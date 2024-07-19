@@ -72,13 +72,11 @@ static downlink_handler_impl_config generate_default_config()
   config.cp                 = cyclic_prefix::NORMAL;
   config.scs                = subcarrier_spacing::kHz30;
   config.dl_processing_time = std::chrono::milliseconds(400);
-  config.tx_timing_params   = {std::chrono::milliseconds(500),
-                               std::chrono::milliseconds(200),
-                               std::chrono::milliseconds(300),
-                               std::chrono::milliseconds(150),
-                               std::chrono::milliseconds(250),
-                               std::chrono::milliseconds(100)};
-
+  // Transmission timing parameters corresponding to:
+  // T1a_max_cp_dl=500us, T1a_min_cp_dl=200us,
+  // T1a_max_cp_ul=300us, T1a_min_cp_ul=150us,
+  // T1a_max_up=250us, T1a_min_up=100us.
+  config.tx_timing_params = {13, 6, 8, 5, 6, 3};
   return config;
 }
 
@@ -96,7 +94,7 @@ TEST(ofh_downlink_handler_impl, handling_downlink_data_use_control_and_user_plan
   std::unique_ptr<data_flow_uplane_downlink_data_spy> uplane = std::make_unique<data_flow_uplane_downlink_data_spy>();
   const auto&                                         uplane_spy = *uplane;
   dependencies.data_flow_uplane                                  = std::move(uplane);
-  dependencies.frame_pool_ptr                                    = std::make_shared<ether::eth_frame_pool>(mtu_size, 2);
+  dependencies.frame_pool                                        = std::make_shared<ether::eth_frame_pool>(mtu_size, 2);
 
   downlink_handler_impl handler(config, std::move(dependencies));
 
@@ -142,7 +140,7 @@ TEST(ofh_downlink_handler_impl, late_rg_is_not_handled)
   std::unique_ptr<data_flow_uplane_downlink_data_spy> uplane = std::make_unique<data_flow_uplane_downlink_data_spy>();
   const auto&                                         uplane_spy = *uplane;
   dependencies.data_flow_uplane                                  = std::move(uplane);
-  dependencies.frame_pool_ptr                                    = std::make_shared<ether::eth_frame_pool>(mtu_size, 2);
+  dependencies.frame_pool                                        = std::make_shared<ether::eth_frame_pool>(mtu_size, 2);
 
   downlink_handler_impl handler(config, std::move(dependencies));
 
@@ -181,7 +179,7 @@ TEST(ofh_downlink_handler_impl, same_slot_fails)
   std::unique_ptr<data_flow_uplane_downlink_data_spy> uplane = std::make_unique<data_flow_uplane_downlink_data_spy>();
   const auto&                                         uplane_spy = *uplane;
   dependencies.data_flow_uplane                                  = std::move(uplane);
-  dependencies.frame_pool_ptr                                    = std::make_shared<ether::eth_frame_pool>(mtu_size, 2);
+  dependencies.frame_pool                                        = std::make_shared<ether::eth_frame_pool>(mtu_size, 2);
 
   downlink_handler_impl handler(config, std::move(dependencies));
 
@@ -216,7 +214,7 @@ TEST(ofh_downlink_handler_impl, rg_in_the_frontier_is_handled)
   std::unique_ptr<data_flow_uplane_downlink_data_spy> uplane = std::make_unique<data_flow_uplane_downlink_data_spy>();
   const auto&                                         uplane_spy = *uplane;
   dependencies.data_flow_uplane                                  = std::move(uplane);
-  dependencies.frame_pool_ptr                                    = std::make_shared<ether::eth_frame_pool>(mtu_size, 2);
+  dependencies.frame_pool                                        = std::make_shared<ether::eth_frame_pool>(mtu_size, 2);
 
   downlink_handler_impl handler(config, std::move(dependencies));
 

@@ -30,6 +30,8 @@ using namespace srsran;
 using namespace srsran::srs_cu_cp;
 using namespace asn1::f1ap;
 
+constexpr std::chrono::milliseconds ue_context_release_response_timeout{1000};
+
 ue_context_release_procedure::ue_context_release_procedure(const f1ap_ue_context_release_command& cmd_,
                                                            f1ap_ue_context&                       ue_ctxt_,
                                                            f1ap_message_notifier&                 f1ap_notif_) :
@@ -37,7 +39,7 @@ ue_context_release_procedure::ue_context_release_procedure(const f1ap_ue_context
 {
   command->gnb_cu_ue_f1ap_id = gnb_cu_ue_f1ap_id_to_uint(ue_ctxt.ue_ids.cu_ue_f1ap_id);
   command->gnb_du_ue_f1ap_id = gnb_du_ue_f1ap_id_to_uint(ue_ctxt.ue_ids.du_ue_f1ap_id);
-  command->cause             = cause_to_f1ap_asn1(cmd_.cause);
+  command->cause             = cause_to_asn1(cmd_.cause);
   if (!cmd_.rrc_release_pdu.empty()) {
     command->rrc_container_present = true;
     command->rrc_container         = cmd_.rrc_release_pdu.copy();
@@ -55,7 +57,7 @@ void ue_context_release_procedure::operator()(coro_context<async_task<ue_index_t
 
   logger.debug("{}: Procedure started...", f1ap_ue_log_prefix{ue_ctxt.ue_ids, name()});
 
-  transaction_sink.subscribe_to(ue_ctxt.ev_mng.context_release_complete);
+  transaction_sink.subscribe_to(ue_ctxt.ev_mng.context_release_complete, ue_context_release_response_timeout);
 
   ue_ctxt.marked_for_release = true;
 
@@ -77,13 +79,6 @@ void ue_context_release_procedure::send_ue_context_release_command()
   f1ap_ue_ctxt_rel_msg.pdu.set_init_msg();
   f1ap_ue_ctxt_rel_msg.pdu.init_msg().load_info_obj(ASN1_F1AP_ID_UE_CONTEXT_RELEASE);
   f1ap_ue_ctxt_rel_msg.pdu.init_msg().value.ue_context_release_cmd() = command;
-
-  if (ue_ctxt.logger.get_basic_logger().debug.enabled()) {
-    asn1::json_writer js;
-    f1ap_ue_ctxt_rel_msg.pdu.to_json(js);
-    logger.debug(
-        "{}: Containerized UEContextReleaseCommand: {}", f1ap_ue_log_prefix{ue_ctxt.ue_ids, name()}, js.to_string());
-  }
 
   // send UE Context Release Command
   f1ap_notifier.on_new_message(f1ap_ue_ctxt_rel_msg);

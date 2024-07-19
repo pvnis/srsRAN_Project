@@ -22,10 +22,7 @@
 
 #include "rrc_ue_test_helpers.h"
 #include "rrc_ue_test_messages.h"
-#include "srsran/adt/byte_buffer.h"
-#include "srsran/rrc/rrc_du_factory.h"
-#include "srsran/support/async/fifo_async_task_scheduler.h"
-#include "srsran/support/test_utils.h"
+#include "srsran/support/async/async_test_utils.h"
 #include <gtest/gtest.h>
 
 using namespace srsran;
@@ -92,9 +89,10 @@ TEST_F(rrc_ue_smc, when_key_provided_smc_generated)
   init_sec_ctx.k                          = sk_gnb;
   std::fill(init_sec_ctx.supported_int_algos.begin(), init_sec_ctx.supported_int_algos.end(), true);
   std::fill(init_sec_ctx.supported_enc_algos.begin(), init_sec_ctx.supported_enc_algos.end(), true);
+  ue_mng.find_ue(allocated_ue_index)->get_security_manager().init_security_context(init_sec_ctx);
 
   // Trigger SMC
-  async_task<bool>         t = get_rrc_ue_security_handler()->handle_init_security_context(init_sec_ctx);
+  async_task<bool>         t = get_rrc_ue_security_handler()->handle_init_security_context();
   lazy_task_launcher<bool> t_launcher(t);
 
   ASSERT_FALSE(t.ready());
@@ -118,9 +116,10 @@ TEST_F(rrc_ue_smc, when_reply_missing_procedure_timeout)
   init_sec_ctx.k                          = sk_gnb;
   std::fill(init_sec_ctx.supported_int_algos.begin(), init_sec_ctx.supported_int_algos.end(), true);
   std::fill(init_sec_ctx.supported_enc_algos.begin(), init_sec_ctx.supported_enc_algos.end(), true);
+  ue_mng.find_ue(allocated_ue_index)->get_security_manager().init_security_context(init_sec_ctx);
 
   // Trigger SMC
-  async_task<bool>         t = get_rrc_ue_security_handler()->handle_init_security_context(init_sec_ctx);
+  async_task<bool>         t = get_rrc_ue_security_handler()->handle_init_security_context();
   lazy_task_launcher<bool> t_launcher(t);
 
   ASSERT_FALSE(t.ready());

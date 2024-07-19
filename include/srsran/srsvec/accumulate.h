@@ -23,14 +23,18 @@
 #pragma once
 
 #include "srsran/adt/complex.h"
-#include "srsran/srsvec/detail/traits.h"
-#include "srsran/support/srsran_assert.h"
+#include "srsran/adt/span.h"
 #include <numeric>
 
 namespace srsran {
 namespace srsvec {
 
 float accumulate(span<const float> x);
+
+inline cf_t accumulate(span<const cf_t> x)
+{
+  return std::accumulate(x.begin(), x.end(), cf_t());
+}
 
 } // namespace srsvec
 } // namespace srsran

@@ -23,6 +23,7 @@
 #pragma once
 
 #include "lib/du_manager/converters/scheduler_configuration_helpers.h"
+#include "lib/scheduler/config/sched_config_manager.h"
 #include "srsran/du/du_cell_config_helpers.h"
 #include "srsran/ran/duplex_mode.h"
 #include "srsran/scheduler/config/csi_helper.h"
@@ -72,14 +73,10 @@ make_default_sched_cell_configuration_request(const config_helpers::cell_config_
       default_pucch_builder_params, sched_req.ul_cfg_common.init_ul_bwp.generic_params.crbs.length());
 
   if (params.csi_rs_enabled) {
-    csi_helper::csi_builder_params csi_params{};
-    csi_params.pci           = params.pci;
-    csi_params.nof_rbs       = sched_req.dl_cfg_common.init_dl_bwp.generic_params.crbs.length();
-    csi_params.nof_ports     = params.nof_dl_ports;
-    csi_params.csi_rs_period = csi_helper::get_max_csi_rs_period(params.scs_common);
-
-    sched_req.zp_csi_rs_list      = csi_helper::make_periodic_zp_csi_rs_resource_list(csi_params);
-    sched_req.nzp_csi_rs_res_list = csi_helper::make_nzp_csi_rs_resource_list(csi_params);
+    csi_meas_config csi_meas      = config_helpers::make_csi_meas_config(params);
+    pdsch_config    pdsch         = config_helpers::make_default_pdsch_config(params);
+    sched_req.zp_csi_rs_list      = pdsch.zp_csi_rs_res_list;
+    sched_req.nzp_csi_rs_res_list = csi_meas.nzp_csi_rs_res_list;
   }
 
   return sched_req;
@@ -194,34 +191,34 @@ inline uplink_config make_test_ue_uplink_config(const config_helpers::cell_confi
   pucch_cfg.pucch_res_list.push_back(res_basic_f2);
   // >>> PUCCH resource 4.
   pucch_cfg.pucch_res_list.push_back(res_basic_f2);
-  pucch_resource& res4                                                   = pucch_cfg.pucch_res_list.back();
-  res4.res_id                                                            = pucch_res_id_t{4, 4};
-  variant_get<pucch_format_2_3_cfg>(res4.format_params).starting_sym_idx = 2;
+  pucch_resource& res4                                                = pucch_cfg.pucch_res_list.back();
+  res4.res_id                                                         = pucch_res_id_t{4, 4};
+  std::get<pucch_format_2_3_cfg>(res4.format_params).starting_sym_idx = 2;
   // >>> PUCCH resource 5.
   pucch_cfg.pucch_res_list.push_back(res_basic_f2);
-  pucch_resource& res5                                                   = pucch_cfg.pucch_res_list.back();
-  res5.res_id                                                            = pucch_res_id_t{5, 5};
-  variant_get<pucch_format_2_3_cfg>(res5.format_params).starting_sym_idx = 4;
+  pucch_resource& res5                                                = pucch_cfg.pucch_res_list.back();
+  res5.res_id                                                         = pucch_res_id_t{5, 5};
+  std::get<pucch_format_2_3_cfg>(res5.format_params).starting_sym_idx = 4;
   // >>> PUCCH resource 6.
   pucch_cfg.pucch_res_list.push_back(res_basic_f2);
-  pucch_resource& res6                                                   = pucch_cfg.pucch_res_list.back();
-  res6.res_id                                                            = pucch_res_id_t{6, 6};
-  variant_get<pucch_format_2_3_cfg>(res6.format_params).starting_sym_idx = 6;
+  pucch_resource& res6                                                = pucch_cfg.pucch_res_list.back();
+  res6.res_id                                                         = pucch_res_id_t{6, 6};
+  std::get<pucch_format_2_3_cfg>(res6.format_params).starting_sym_idx = 6;
   // >>> PUCCH resource 7.
   pucch_cfg.pucch_res_list.push_back(res_basic_f2);
-  pucch_resource& res7                                                   = pucch_cfg.pucch_res_list.back();
-  res7.res_id                                                            = pucch_res_id_t{7, 7};
-  variant_get<pucch_format_2_3_cfg>(res7.format_params).starting_sym_idx = 8;
+  pucch_resource& res7                                                = pucch_cfg.pucch_res_list.back();
+  res7.res_id                                                         = pucch_res_id_t{7, 7};
+  std::get<pucch_format_2_3_cfg>(res7.format_params).starting_sym_idx = 8;
   // >>> PUCCH resource 8.
   pucch_cfg.pucch_res_list.push_back(res_basic_f2);
-  pucch_resource& res8                                                   = pucch_cfg.pucch_res_list.back();
-  res8.res_id                                                            = pucch_res_id_t{8, 8};
-  variant_get<pucch_format_2_3_cfg>(res8.format_params).starting_sym_idx = 10;
+  pucch_resource& res8                                                = pucch_cfg.pucch_res_list.back();
+  res8.res_id                                                         = pucch_res_id_t{8, 8};
+  std::get<pucch_format_2_3_cfg>(res8.format_params).starting_sym_idx = 10;
   // >>> PUCCH resource 9.
   pucch_cfg.pucch_res_list.push_back(res_basic_f2);
-  pucch_resource& res9                                                   = pucch_cfg.pucch_res_list.back();
-  res9.res_id                                                            = pucch_res_id_t{9, 9};
-  variant_get<pucch_format_2_3_cfg>(res9.format_params).starting_sym_idx = 12;
+  pucch_resource& res9                                                = pucch_cfg.pucch_res_list.back();
+  res9.res_id                                                         = pucch_res_id_t{9, 9};
+  std::get<pucch_format_2_3_cfg>(res9.format_params).starting_sym_idx = 12;
 
   // >>> PUCCH resource 10.
   pucch_cfg.pucch_res_list.push_back(res_basic);
@@ -290,6 +287,37 @@ inline slot_point generate_random_slot_point(subcarrier_spacing scs)
   uint32_t count = scs_dists[to_numerology_value(scs)](test_rgen::get());
   return slot_point{scs, count};
 }
+
+/// Helper class to manage cell and UE configurations of a scheduler test.
+class test_sched_config_manager
+{
+public:
+  test_sched_config_manager(const cell_config_builder_params& builder_params,
+                            const scheduler_expert_config&    expert_cfg_ = {});
+  ~test_sched_config_manager();
+
+  const sched_cell_configuration_request_message& get_default_cell_config_request() const { return default_cell_req; }
+  const sched_ue_creation_request_message&        get_default_ue_config_request() const { return default_ue_req; }
+
+  const cell_configuration* add_cell(const sched_cell_configuration_request_message& msg);
+
+  const cell_configuration& get_cell(du_cell_index_t cell_idx) const { return *cfg_mng.common_cell_list()[cell_idx]; }
+
+  const ue_configuration* add_ue(const sched_ue_creation_request_message& cfg_req);
+  bool                    rem_ue(du_ue_index_t ue_index);
+
+private:
+  const cell_config_builder_params               builder_params;
+  scheduler_expert_config                        expert_cfg;
+  std::unique_ptr<sched_configuration_notifier>  cfg_notifier;
+  std::unique_ptr<scheduler_metrics_notifier>    metric_notifier;
+  std::unique_ptr<sched_metrics_ue_configurator> ue_metrics_configurator;
+
+  sched_cell_configuration_request_message default_cell_req;
+  sched_ue_creation_request_message        default_ue_req;
+
+  sched_config_manager cfg_mng;
+};
 
 } // namespace test_helpers
 } // namespace srsran

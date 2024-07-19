@@ -20,7 +20,7 @@
  *
  */
 
-#include "../../../fapi/validators/helpers.h"
+#include "../../../fapi/message_builder_helpers.h"
 #include "srsran/fapi_adaptor/phy/messages/pusch.h"
 #include "srsran/fapi_adaptor/uci_part2_correspondence_generator.h"
 #include <gtest/gtest.h>
@@ -82,7 +82,7 @@ TEST(fapi_phy_ul_pusch_adaptor_test, valid_pdu_pass)
   ASSERT_EQ(fapi_pdu.pusch_dmrs_scrambling_id, phy_pdu.scrambling_id);
   ASSERT_EQ(fapi_pdu.nscid, phy_pdu.n_scid);
   ASSERT_EQ(fapi_pdu.num_dmrs_cdm_grps_no_data, phy_pdu.nof_cdm_groups_without_data);
-  ASSERT_EQ(fapi_pdu.pusch_maintenance_v3.tb_size_lbrm_bytes.value(), phy_pdu.tbs_lbrm_bytes);
+  ASSERT_EQ(fapi_pdu.pusch_maintenance_v3.tb_size_lbrm_bytes, phy_pdu.tbs_lbrm);
 
   // RB allocation.
   bounded_bitset<MAX_RB> vrb_bitmap(fapi_pdu.bwp_size);

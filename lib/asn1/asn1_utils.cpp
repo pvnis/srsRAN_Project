@@ -195,6 +195,21 @@ SRSASN_CODE bit_ref::align_bytes_zero()
   return SRSASN_SUCCESS;
 }
 
+cbit_ref cbit_ref::subview(uint32_t offset_bytes, uint32_t len_bytes) const
+{
+  const uint32_t buffer_rem_bytes = buffer.end() - it;
+  const uint32_t nof_bytes_needed = len_bytes + ((offset != 0) ? 1 : 0); // account for the last bits in the last byte.
+  if (offset_bytes + nof_bytes_needed > buffer_rem_bytes) {
+    log_error("subview: Buffer size limit was achieved");
+    return cbit_ref(srsran::byte_buffer_view{});
+  }
+
+  auto     start_it = it + offset_bytes;
+  cbit_ref v{srsran::byte_buffer_view(start_it, start_it + nof_bytes_needed)};
+  v.offset = offset;
+  return v;
+}
+
 int cbit_ref::distance_bytes() const
 {
   return static_cast<int>(it - buffer.begin()) + (offset != 0 ? 1 : 0);
@@ -207,7 +222,7 @@ int cbit_ref::distance() const
 
 int cbit_ref::distance(const cbit_ref& other) const
 {
-  return distance() - other.distance();
+  return static_cast<int>(it - other.it) * 8 + (static_cast<int>(offset) - static_cast<int>(other.offset));
 }
 
 template <class T>
@@ -288,6 +303,16 @@ SRSASN_CODE cbit_ref::advance_bits(uint32_t n_bits)
   }
   it += bytes_offset;
   offset = extra_bits;
+  return SRSASN_SUCCESS;
+}
+
+SRSASN_CODE cbit_ref::advance_bytes(uint32_t bytes)
+{
+  if (bytes + (offset != 0 ? 1 : 0) > buffer.end() - it) {
+    log_error("advance_bytes: Buffer size limit was achieved");
+    return SRSASN_ERROR_DECODE_FAIL;
+  }
+  it += bytes;
   return SRSASN_SUCCESS;
 }
 
@@ -941,7 +966,7 @@ uint64_t octet_string_helper::to_uint(const byte_buffer& buf)
 void octet_string_helper::to_octet_string(srsran::span<uint8_t> buf, uint64_t number)
 {
   uint64_t nbytes = buf.size();
-  if ((static_cast<uint64_t>(1U) << (8U * nbytes)) <= number) {
+  if (nbytes < 8 and (static_cast<uint64_t>(1U) << (8U * nbytes)) <= number) {
     log_error("Integer={} does not fit in an OCTET STRING of size={}", number, nbytes);
     return;
   }
@@ -952,7 +977,7 @@ void octet_string_helper::to_octet_string(srsran::span<uint8_t> buf, uint64_t nu
 
 void octet_string_helper::to_octet_string(srsran::byte_buffer& buf, uint64_t number)
 {
-  buf.clear();
+  buf           = byte_buffer{byte_buffer::fallback_allocation_tag{}};
   size_t nbytes = sizeof(number);
   for (uint32_t i = 0; i < nbytes; ++i) {
     if (not buf.append((number >> (uint64_t)((nbytes - 1 - i) * 8U)) & 0xffu)) {
@@ -997,7 +1022,7 @@ unsigned octet_string_helper::hex_string_to_octets(srsran::span<uint8_t> buf, co
 {
   srsran_assert(buf.size() >= ceil_frac(str.size(), (size_t)2U), "out-of-bounds access");
   if (str.size() % 2 != 0) {
-    log_warning("The provided hex string size={} is not a multiple of 2.", str.size());
+    log_error("The provided hex string size={} is not a multiple of 2.", str.size());
   }
   char cstr[] = "\0\0\0";
   for (unsigned i = 0; i < str.size(); i += 2) {
@@ -1010,7 +1035,7 @@ unsigned octet_string_helper::hex_string_to_octets(srsran::span<uint8_t> buf, co
 void octet_string_helper::append_hex_string(byte_buffer& buf, const std::string& str)
 {
   if (str.size() % 2 != 0) {
-    log_warning("The provided hex string size={} is not a multiple of 2.", str.size());
+    log_error("The provided hex string size={} is not a multiple of 2.", str.size());
   }
   char cstr[] = "\0\0\0";
   for (unsigned i = 0; i < str.size(); i += 2) {
@@ -1026,10 +1051,18 @@ void octet_string_helper::append_hex_string(byte_buffer& buf, const std::string&
 ************************/
 
 template <bool Al>
+unbounded_octstring<Al>::unbounded_octstring(const unbounded_octstring& other) noexcept :
+  // Use fallback allocator, because operator= should never fail.
+  srsran::byte_buffer(fallback_allocation_tag{}, other)
+{
+}
+
+template <bool Al>
 unbounded_octstring<Al>& unbounded_octstring<Al>::operator=(const unbounded_octstring& other) noexcept
 {
   if (this != &other) {
-    *static_cast<byte_buffer*>(this) = other.deep_copy();
+    // Use fallback allocator, because operator= should never fail.
+    *this = byte_buffer{fallback_allocation_tag{}, other};
   }
   return *this;
 }
@@ -1046,7 +1079,7 @@ SRSASN_CODE unbounded_octstring<Al>::pack(bit_ref& bref) const
 {
   HANDLE_CODE(pack_length(bref, length(), aligned));
   for (uint8_t b : *this) {
-    bref.pack(b, 8);
+    HANDLE_CODE(bref.pack(b, 8));
   }
   return SRSASN_SUCCESS;
 }
@@ -1074,8 +1107,12 @@ std::string unbounded_octstring<Al>::to_string() const
 template <bool Al>
 unbounded_octstring<Al>& unbounded_octstring<Al>::from_string(const std::string& hexstr)
 {
-  this->clear();
+  // clears previous buffer.
+  *this = byte_buffer{byte_buffer::fallback_allocation_tag{}};
+
+  // appends hex string to buffer.
   octet_string_helper::append_hex_string(*this, hexstr);
+
   return *this;
 }
 
@@ -1439,8 +1476,9 @@ SRSASN_CODE ext_groups_unpacker_guard::unpack(cbit_ref& bref)
 {
   bref_tracker = &bref;
   // unpack nof of ext groups
-  HANDLE_CODE(unpack_norm_small_non_neg_whole_number(nof_unpacked_groups, bref));
-  nof_unpacked_groups += 1;
+  uint32_t nof_ext_groups = 0;
+  HANDLE_CODE(unpack_norm_small_non_neg_whole_number(nof_ext_groups, bref));
+  nof_unpacked_groups += nof_ext_groups + 1;
   resize(nof_unpacked_groups);
 
   // unpack each group presence flag
@@ -1487,12 +1525,21 @@ varlength_field_unpack_guard::varlength_field_unpack_guard(cbit_ref& bref, bool 
   bref0(bref),
   bref_tracker(&bref)
 {
+  bref = bref.subview(0, len);
 }
 
 varlength_field_unpack_guard::~varlength_field_unpack_guard()
 {
-  uint32_t pad;
-  bref_tracker->unpack(pad, len * 8 - bref_tracker->distance(bref0));
+  if (len * 8 < (unsigned)bref_tracker->distance(bref0)) {
+    log_error("The number of bits unpacked exceeds the variable length field size ({} > {})",
+              bref_tracker->distance(bref0),
+              len * 8);
+    return;
+  }
+
+  // Ignore padding bits, and skip to the end of the varlength field.
+  bref0.advance_bytes(len);
+  *bref_tracker = bref0;
 }
 
 /*******************
@@ -1711,6 +1758,9 @@ SRSASN_CODE unpack_unconstrained_real(float& n, cbit_ref& bref, bool aligned)
   }
   uint32_t len;
   HANDLE_CODE(unpack_length(len, bref, aligned));
+  if (len < 2) {
+    return SRSASN_ERROR_DECODE_FAIL;
+  }
 
   uint8_t buf[buf_len];
   for (uint32_t i = 0; i < len; i++) {

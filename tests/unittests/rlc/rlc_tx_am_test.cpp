@@ -21,10 +21,11 @@
  */
 
 #include "lib/rlc/rlc_tx_am_entity.h"
-#include "rlc_test_helpers.h"
+#include "tests/test_doubles/pdcp/pdcp_pdu_generator.h"
+#include "srsran/ran/pdsch/pdsch_constants.h"
 #include "srsran/support/executors/manual_task_worker.h"
 #include <gtest/gtest.h>
-#include <queue>
+#include <list>
 
 using namespace srsran;
 
@@ -37,12 +38,15 @@ class rlc_tx_am_test_frame : public rlc_tx_upper_layer_data_notifier,
 public:
   std::list<uint32_t> highest_transmitted_pdcp_sn_list;
   std::list<uint32_t> highest_delivered_pdcp_sn_list;
+  std::list<uint32_t> highest_retransmitted_pdcp_sn_list;
+  std::list<uint32_t> highest_delivered_retransmitted_pdcp_sn_list;
   rlc_am_sn_size      sn_size;
   rlc_am_status_pdu   status;
   bool                status_required = false;
   uint32_t            bsr             = 0;
   uint32_t            bsr_count       = 0;
   uint32_t            max_retx_count  = 0;
+  uint32_t            proto_err_count = 0;
 
   rlc_tx_am_test_frame(rlc_am_sn_size sn_size_) : sn_size(sn_size_), status(sn_size_) {}
 
@@ -59,8 +63,20 @@ public:
     highest_delivered_pdcp_sn_list.push_back(max_deliv_pdcp_sn);
   }
 
+  void on_retransmitted_sdu(uint32_t max_retx_pdcp_sn) override
+  {
+    // store in list
+    highest_retransmitted_pdcp_sn_list.push_back(max_retx_pdcp_sn);
+  }
+
+  void on_delivered_retransmitted_sdu(uint32_t max_deliv_retx_pdcp_sn) override
+  {
+    // store in list
+    highest_delivered_retransmitted_pdcp_sn_list.push_back(max_deliv_retx_pdcp_sn);
+  }
+
   // rlc_tx_upper_layer_control_notifier interface
-  void on_protocol_failure() override {}
+  void on_protocol_failure() override { proto_err_count++; }
   void on_max_retx() override { max_retx_count++; }
 
   // rlc_tx_buffer_state_update_notifier interface
@@ -78,7 +94,7 @@ public:
 
 /// Fixture class for RLC AM Tx tests
 /// It requires TEST_P() and INSTANTIATE_TEST_SUITE_P() to create/spawn tests for each supported SN size
-class rlc_tx_am_test : public ::testing::Test, public ::testing::WithParamInterface<rlc_am_sn_size>, public rlc_trx_test
+class rlc_tx_am_test : public ::testing::Test, public ::testing::WithParamInterface<rlc_am_sn_size>
 {
 protected:
   void SetUp() override
@@ -95,6 +111,7 @@ protected:
 
     // Set Tx config
     config.sn_field_length = sn_size;
+    config.pdcp_sn_len     = static_cast<pdcp_sn_size>(sn_size); // use the same SN size for PDCP
     config.t_poll_retx     = 45;
     config.max_retx_thresh = 4;
     config.poll_pdu        = 4;
@@ -106,7 +123,7 @@ protected:
     tester = std::make_unique<rlc_tx_am_test_frame>(config.sn_field_length);
 
     // Create RLC AM TX entity
-    rlc = std::make_unique<rlc_tx_am_entity>(0,
+    rlc = std::make_unique<rlc_tx_am_entity>(gnb_du_id_t::min,
                                              du_ue_index_t::MIN_DU_UE_INDEX,
                                              srb_id_t::srb0,
                                              config,
@@ -129,37 +146,23 @@ protected:
     srslog::flush();
   }
 
-  /// \brief Creates a new rlc_sdu
-  ///
-  /// The produced SDU contains an incremental sequence of bytes starting with the value given by first_byte,
-  /// i.e. if first_byte = 0xfc, the SDU will be 0xfc 0xfe 0xff 0x00 0x01 ...
-  /// \param pdcp_sn PDCP sequence number
-  /// \param sdu_size Size of the SDU
-  /// \param first_byte Value of the first byte
-  /// \return the produced SDU as a rlc_sdu
-  rlc_sdu create_rlc_sdu(uint32_t pdcp_sn, uint32_t sdu_size, uint8_t first_byte = 0) const
-  {
-    rlc_sdu sdu = {create_sdu(sdu_size, first_byte), pdcp_sn};
-    return sdu;
-  }
-
   /// \brief Obtains full RLC AMD PDUs from generated SDUs that are passed through an RLC AM entity
-  /// \param[out] out_pdus Pre-allocated array of size n_pdus for the resulting RLC AMD PDUs
   /// \param[in] n_pdus Length of the out_pdus array
   /// \param[in] sdu_size Size of SDU that is passed through RLC AM entity
-  void tx_full_pdus(byte_buffer_chain* out_pdus, uint32_t n_pdus, uint32_t sdu_size = 1)
+  /// \return A vector of resulting RLC AMD PDUs
+  std::vector<std::vector<uint8_t>> tx_full_pdus(uint32_t n_pdus, uint32_t sdu_size = 1)
   {
+    std::vector<std::vector<uint8_t>> out_pdus;
+    out_pdus.reserve(n_pdus);
     uint32_t n_bsr = tester->bsr_count;
 
     // Push "n_pdus" SDUs into RLC
-    byte_buffer sdu_bufs[n_pdus];
+    auto sdu_bufs = std::vector<byte_buffer>(n_pdus);
     for (uint32_t i = 0; i < n_pdus; i++) {
-      sdu_bufs[i] = create_sdu(sdu_size, i);
+      sdu_bufs[i] = test_helpers::create_pdcp_pdu(config.pdcp_sn_len, i, sdu_size, i);
 
       // write SDU into upper end
-      rlc_sdu sdu = {sdu_bufs[i].deep_copy(),
-                     /* pdcp_sn = */ i}; // no std::move - keep local copy for later comparison
-      rlc->handle_sdu(std::move(sdu));
+      rlc->handle_sdu(sdu_bufs[i].deep_copy().value(), false); // keep local copy for later comparison
     }
     pcell_worker.run_pending_tasks();
     EXPECT_EQ(tester->bsr_count, ++n_bsr);
@@ -176,10 +179,10 @@ protected:
       pdu_buf.resize(data_pdu_size);
       size_t pdu_len = rlc->pull_pdu(pdu_buf);
       pdu_buf.resize(pdu_len);
-      out_pdus[i] = byte_buffer_chain{byte_buffer{pdu_buf}};
+      out_pdus.push_back(std::move(pdu_buf));
 
       // Check PDU size
-      EXPECT_EQ(out_pdus[i].length(), data_pdu_size);
+      EXPECT_EQ(out_pdus[i].size(), data_pdu_size);
       // Check PDU payload
       EXPECT_TRUE(
           std::equal(out_pdus[i].begin() + header_size, out_pdus[i].end(), sdu_bufs[i].begin(), sdu_bufs[i].end()));
@@ -195,38 +198,39 @@ protected:
     EXPECT_EQ(rlc->get_buffer_state(), 0);
     EXPECT_EQ(tester->bsr, expect_buffer_state); // pull_pdu does not push BSR to lower layer
     EXPECT_EQ(tester->bsr_count, n_bsr);
+
+    return out_pdus;
   }
 
   /// \brief Obtains RLC AMD PDU segments from generated SDUs that are passed through an RLC AM entity
-  /// \param[out] out_pdus Pre-allocated array of size n_pdus for the resulting RLC AMD PDU segments
   /// \param[in] n_pdus Length of the out_pdus array
   /// \param[in] pdu_size Maximum size of each PDU that is read from RLC AM entity
   /// \param[in] n_sdus Number of SDUs to push into RLC AM entity
   /// \param[in] sdu_size Size of each SDU that is pushed into RLC AM entity
-  void tx_segmented_pdus(byte_buffer_chain* out_pdus,
-                         uint32_t           n_pdus,
-                         uint32_t           pdu_size,
-                         uint32_t           n_sdus,
-                         uint32_t           sdu_size,
-                         uint32_t           expect_remaining_bytes = 0)
+  /// \return A vector of resulting RLC AMD PDUs
+  std::vector<std::vector<uint8_t>> tx_segmented_pdus(uint32_t n_pdus,
+                                                      uint32_t pdu_size,
+                                                      uint32_t n_sdus,
+                                                      uint32_t sdu_size,
+                                                      uint32_t expect_remaining_bytes = 0)
   {
+    std::vector<std::vector<uint8_t>> out_pdus;
+    out_pdus.reserve(n_pdus);
     uint32_t header_min_size = sn_size == rlc_am_sn_size::size12bits ? 2 : 3;
     uint32_t header_so_size  = 2;
 
     uint32_t n_bsr = tester->bsr_count;
 
     // Precondition
-    ASSERT_LT(pdu_size, sdu_size + header_min_size) << "PDU size fits whole SDU; PDUs won't be segmented";
+    EXPECT_LT(pdu_size, sdu_size + header_min_size) << "PDU size fits whole SDU; PDUs won't be segmented";
 
     // Push "n_sdus" SDUs into RLC
-    byte_buffer sdu_bufs[n_sdus];
+    auto sdu_bufs = std::vector<byte_buffer>(n_sdus);
     for (uint32_t i = 0; i < n_sdus; i++) {
-      sdu_bufs[i] = create_sdu(sdu_size, i);
+      sdu_bufs[i] = test_helpers::create_pdcp_pdu(config.pdcp_sn_len, i, sdu_size, i);
 
       // write SDU into upper end
-      rlc_sdu sdu = {sdu_bufs[i].deep_copy(),
-                     /* pdcp_sn = */ i}; // no std::move - keep local copy for later comparison
-      rlc->handle_sdu(std::move(sdu));
+      rlc->handle_sdu(sdu_bufs[i].deep_copy().value(), false); // keep local copy for later comparison
     }
     pcell_worker.run_pending_tasks();
     EXPECT_EQ(tester->bsr_count, ++n_bsr);
@@ -244,22 +248,22 @@ protected:
       seg_buf.resize(pdu_size);
       size_t seg_len = rlc->pull_pdu(seg_buf);
       seg_buf.resize(seg_len);
-      out_pdus[i] = byte_buffer_chain{byte_buffer{seg_buf}};
+      out_pdus.push_back(std::move(seg_buf));
 
       // Check PDU size
-      EXPECT_GT(out_pdus[i].length(), header_size);
-      EXPECT_LE(out_pdus[i].length(), pdu_size);
+      EXPECT_GT(out_pdus[i].size(), header_size);
+      EXPECT_LE(out_pdus[i].size(), pdu_size);
 
       // Check PDU payload
       auto pdu_begin = out_pdus[i].begin() + header_size;
       auto pdu_end   = out_pdus[i].end();
       auto sdu_begin = sdu_bufs[sdu_idx].begin() + sdu_so;
-      ASSERT_TRUE(std::equal(pdu_begin, pdu_end, sdu_begin))
+      EXPECT_TRUE(std::equal(pdu_begin, pdu_end, sdu_begin))
           << "sdu_idx=" << sdu_idx << ", sdu_so=" << sdu_so << ", i=" << i << ", header_size=" << header_size;
 
       // Check remaining buffer state
       uint32_t rem_sdus      = n_sdus - sdu_idx - 1;
-      uint32_t rem_seg_bytes = sdu_bufs[sdu_idx].length() - sdu_so - out_pdus[i].length() + header_size;
+      uint32_t rem_seg_bytes = sdu_bufs[sdu_idx].length() - sdu_so - out_pdus[i].size() + header_size;
       uint32_t rem_seg_hdr   = rem_seg_bytes > 0 ? header_min_size + header_so_size : 0;
       EXPECT_EQ(rlc->get_buffer_state(),
                 rem_sdus * (sdu_size + header_min_size) + rem_seg_bytes + rem_seg_hdr); // actual buffer state changes
@@ -291,12 +295,14 @@ protected:
         sdu_idx++;
         sdu_so = 0;
       } else {
-        sdu_so += out_pdus[i].length() - header_size;
+        sdu_so += out_pdus[i].size() - header_size;
       }
     }
     EXPECT_EQ(rlc->get_buffer_state(), expect_remaining_bytes);
     EXPECT_EQ(tester->bsr, expect_buffer_state); // pull_pdu does not push BSR to lower layer
     EXPECT_EQ(tester->bsr_count, n_bsr);
+
+    return out_pdus;
   }
 
   void tick()
@@ -327,11 +333,10 @@ TEST_P(rlc_tx_am_test, create_new_entity)
 
 TEST_P(rlc_tx_am_test, tx_without_segmentation)
 {
-  const uint32_t    n_pdus = 5;
-  byte_buffer_chain pdus[n_pdus];
+  const uint32_t n_pdus = 5;
 
-  tx_full_pdus(pdus, n_pdus, 1);
-  tx_full_pdus(pdus, n_pdus, 5);
+  tx_full_pdus(n_pdus, 4);
+  tx_full_pdus(n_pdus, 5);
 }
 
 TEST_P(rlc_tx_am_test, tx_small_grant_)
@@ -346,21 +351,19 @@ TEST_P(rlc_tx_am_test, tx_small_grant_)
   const uint32_t so_size     = 2;
   const uint32_t pdu_size    = header_size + so_size + (sdu_size / n_splits);
 
-  byte_buffer_chain pdus[n_pdus];
-
-  tx_segmented_pdus(pdus, n_pdus, pdu_size, n_sdus, sdu_size);
-  tx_segmented_pdus(pdus, n_pdus, pdu_size, n_sdus, sdu_size);
+  tx_segmented_pdus(n_pdus, pdu_size, n_sdus, sdu_size);
+  tx_segmented_pdus(n_pdus, pdu_size, n_sdus, sdu_size);
 }
 
 TEST_P(rlc_tx_am_test, tx_insufficient_space_new_sdu)
 {
-  const uint32_t sdu_size        = 1;
+  const uint32_t sdu_size        = 4;
   const uint32_t header_min_size = sn_size == rlc_am_sn_size::size12bits ? 2 : 3;
   const uint32_t short_size      = header_min_size;
   const uint32_t fit_size        = header_min_size + sdu_size;
 
   EXPECT_EQ(rlc->get_buffer_state(), 0);
-  rlc->handle_sdu(create_rlc_sdu(0, sdu_size));
+  rlc->handle_sdu(test_helpers::create_pdcp_pdu(config.pdcp_sn_len, 0, sdu_size), false);
   EXPECT_EQ(rlc->get_buffer_state(), sdu_size + header_min_size);
   pcell_worker.run_pending_tasks();
   EXPECT_EQ(tester->bsr, sdu_size + header_min_size);
@@ -390,7 +393,7 @@ TEST_P(rlc_tx_am_test, tx_insufficient_space_new_sdu)
 
 TEST_P(rlc_tx_am_test, tx_insufficient_space_continued_sdu)
 {
-  const uint32_t sdu_size        = 3;
+  const uint32_t sdu_size        = 4;
   const uint32_t header_min_size = sn_size == rlc_am_sn_size::size12bits ? 2 : 3;
   const uint32_t header_so_size  = 2;
   const uint32_t min_size_first  = header_min_size + 1;
@@ -398,7 +401,7 @@ TEST_P(rlc_tx_am_test, tx_insufficient_space_continued_sdu)
   const uint32_t min_size_seg    = header_min_size + header_so_size + 1;
 
   EXPECT_EQ(rlc->get_buffer_state(), 0);
-  rlc->handle_sdu(create_rlc_sdu(0, sdu_size));
+  rlc->handle_sdu(test_helpers::create_pdcp_pdu(config.pdcp_sn_len, 0, sdu_size), false);
   pcell_worker.run_pending_tasks();
   EXPECT_EQ(rlc->get_buffer_state(), sdu_size + header_min_size);
   EXPECT_EQ(tester->bsr, sdu_size + header_min_size);
@@ -434,10 +437,11 @@ TEST_P(rlc_tx_am_test, tx_insufficient_space_continued_sdu)
   EXPECT_EQ(tester->bsr, sdu_size + header_min_size);
   EXPECT_EQ(tester->bsr_count, 1);
 
-  // minimum-length read (last segment)
-  pdu_buf.resize(min_size_seg);
+  // remaining-length read (last segment)
+  const uint32_t remaining = (sdu_size - 2) + header_min_size + header_so_size;
+  pdu_buf.resize(remaining);
   pdu_len = rlc->pull_pdu(pdu_buf);
-  EXPECT_EQ(pdu_len, min_size_seg);
+  EXPECT_EQ(pdu_len, remaining);
   pcell_worker.run_pending_tasks();
   EXPECT_EQ(rlc->get_buffer_state(), 0);
   EXPECT_EQ(tester->bsr, sdu_size + header_min_size);
@@ -446,19 +450,17 @@ TEST_P(rlc_tx_am_test, tx_insufficient_space_continued_sdu)
 
 TEST_P(rlc_tx_am_test, sdu_discard)
 {
-  const uint32_t sdu_size = 1;
+  const uint32_t sdu_size = 4;
   const uint32_t n_pdus   = 6;
   uint32_t       n_bsr    = tester->bsr_count;
 
   // Push "n_pdus" SDUs into RLC
   byte_buffer sdu_bufs[n_pdus];
   for (uint32_t i = 0; i < n_pdus; i++) {
-    sdu_bufs[i] = create_sdu(sdu_size, i);
+    sdu_bufs[i] = test_helpers::create_pdcp_pdu(config.pdcp_sn_len, i, sdu_size, i);
 
     // write SDU into upper end
-    rlc_sdu sdu = {sdu_bufs[i].deep_copy(),
-                   /* pdcp_sn = */ i}; // no std::move - keep local copy for later comparison
-    rlc->handle_sdu(std::move(sdu));
+    rlc->handle_sdu(sdu_bufs[i].deep_copy().value(), false); // keep local copy for later comparison
   }
   pcell_worker.run_pending_tasks();
   EXPECT_EQ(tester->bsr_count, ++n_bsr);
@@ -557,22 +559,20 @@ TEST_P(rlc_tx_am_test, sdu_discard)
 
 TEST_P(rlc_tx_am_test, sdu_discard_with_pdcp_sn_wraparound)
 {
-  const uint32_t sdu_size = 1;
+  const uint32_t sdu_size = 4;
   const uint32_t n_pdus   = 6;
   uint32_t       n_bsr    = tester->bsr_count;
 
-  const uint32_t pdcp_sn_start = 4092;
-  const uint32_t pdcp_sn_mod   = 4096;
+  const uint32_t pdcp_sn_mod   = config.pdcp_sn_len == pdcp_sn_size::size12bits ? 4096 : 262144;
+  const uint32_t pdcp_sn_start = pdcp_sn_mod - 4;
 
   // Push "n_pdus" SDUs into RLC
   byte_buffer sdu_bufs[n_pdus];
   for (uint32_t i = 0; i < n_pdus; i++) {
-    sdu_bufs[i] = create_sdu(sdu_size, i);
+    sdu_bufs[i] = test_helpers::create_pdcp_pdu(config.pdcp_sn_len, pdcp_sn_start + i, sdu_size, i);
 
     // write SDU into upper end
-    rlc_sdu sdu = {sdu_bufs[i].deep_copy(),
-                   /* pdcp_sn = */ (pdcp_sn_start + i) % pdcp_sn_mod}; // no std::move, keep copy for later comparison
-    rlc->handle_sdu(std::move(sdu));
+    rlc->handle_sdu(sdu_bufs[i].deep_copy().value(), false); // keep local copy for later comparison
   }
   pcell_worker.run_pending_tasks();
   EXPECT_EQ(tester->bsr_count, ++n_bsr);
@@ -669,15 +669,36 @@ TEST_P(rlc_tx_am_test, sdu_discard_with_pdcp_sn_wraparound)
   EXPECT_EQ(rlc->get_metrics().num_discard_failures, 3);
 }
 
+TEST_P(rlc_tx_am_test, invalid_status_report_ack_sn_larger_than_tx_next)
+{
+  const uint32_t sdu_size = 4;
+  const uint32_t n_pdus   = 5;
+
+  std::vector<std::vector<uint8_t>> pdus = tx_full_pdus(n_pdus, sdu_size);
+
+  // NACK SN=3
+  rlc_am_status_pdu status_pdu(sn_size);
+  status_pdu.ack_sn       = n_pdus + 2;
+  rlc_am_status_nack nack = {};
+  nack.nack_sn            = 3;
+  status_pdu.push_nack(nack);
+  rlc->on_status_pdu(std::move(status_pdu));
+  pcell_worker.run_pending_tasks();
+  ue_worker.run_pending_tasks();
+  EXPECT_EQ(rlc->get_buffer_state(), 0); // invalid status report ignored
+
+  // Verify protocol error notification
+  ASSERT_EQ(tester->proto_err_count, 1);
+}
+
 TEST_P(rlc_tx_am_test, retx_pdu_without_segmentation)
 {
-  const uint32_t    sdu_size        = 3;
-  const uint32_t    header_min_size = sn_size == rlc_am_sn_size::size12bits ? 2 : 3;
-  const uint32_t    n_pdus          = 5;
-  byte_buffer_chain pdus[n_pdus];
+  const uint32_t sdu_size        = 4;
+  const uint32_t header_min_size = sn_size == rlc_am_sn_size::size12bits ? 2 : 3;
+  const uint32_t n_pdus          = 5;
 
-  tx_full_pdus(pdus, n_pdus, sdu_size);
-  uint32_t n_bsr = tester->bsr_count;
+  std::vector<std::vector<uint8_t>> pdus  = tx_full_pdus(n_pdus, sdu_size);
+  uint32_t                          n_bsr = tester->bsr_count;
 
   // NACK SN=3
   rlc_am_status_nack nack = {};
@@ -697,10 +718,9 @@ TEST_P(rlc_tx_am_test, retx_pdu_without_segmentation)
   pdu_buf.resize(sdu_size + header_min_size);
   pdu_len = rlc->pull_pdu(pdu_buf);
   pdu_buf.resize(pdu_len);
-  byte_buffer_chain retx_pdu{byte_buffer{pdu_buf}};
-  logger.debug(retx_pdu.begin(), retx_pdu.end(), "retx_pdu:");
+  logger.debug(pdu_buf.begin(), pdu_buf.end(), "retx_pdu:");
   logger.debug(pdus[nack.nack_sn].begin(), pdus[nack.nack_sn].end(), "pdus[{}]:", nack.nack_sn);
-  EXPECT_EQ(retx_pdu, pdus[nack.nack_sn]);
+  EXPECT_EQ(pdu_buf, pdus[nack.nack_sn]);
   pcell_worker.run_pending_tasks();
   EXPECT_EQ(rlc->get_buffer_state(), 0);
   EXPECT_EQ(tester->bsr, sdu_size + header_min_size);
@@ -720,15 +740,14 @@ TEST_P(rlc_tx_am_test, retx_pdu_without_segmentation)
 
 TEST_P(rlc_tx_am_test, retx_pdu_with_segmentation)
 {
-  const uint32_t    sdu_size        = 3;
-  const uint32_t    header_min_size = sn_size == rlc_am_sn_size::size12bits ? 2 : 3;
-  const uint32_t    so_size         = 2;
-  const uint32_t    header_max_size = header_min_size + so_size;
-  const uint32_t    n_pdus          = 5;
-  byte_buffer_chain pdus[n_pdus];
+  const uint32_t sdu_size        = 4;
+  const uint32_t header_min_size = sn_size == rlc_am_sn_size::size12bits ? 2 : 3;
+  const uint32_t so_size         = 2;
+  const uint32_t header_max_size = header_min_size + so_size;
+  const uint32_t n_pdus          = 5;
 
-  tx_full_pdus(pdus, n_pdus, sdu_size);
-  uint32_t n_bsr = tester->bsr_count;
+  std::vector<std::vector<uint8_t>> pdus  = tx_full_pdus(n_pdus, sdu_size);
+  uint32_t                          n_bsr = tester->bsr_count;
 
   // NACK SN=3
   rlc_am_status_nack nack = {};
@@ -746,22 +765,21 @@ TEST_P(rlc_tx_am_test, retx_pdu_with_segmentation)
   // Read ReTx in segments
   std::vector<uint8_t> pdu_buf;
   size_t               pdu_len;
-  byte_buffer_chain    retx_pdu;
   for (uint32_t i = 0; i < sdu_size; i++) {
     uint32_t header_size = i == 0 ? header_min_size : header_max_size;
     pdu_buf.resize(1 + header_size);
     pdu_len = rlc->pull_pdu(pdu_buf);
     pdu_buf.resize(pdu_len);
-    retx_pdu = byte_buffer_chain{byte_buffer{pdu_buf}};
-    logger.debug(retx_pdu.begin(), retx_pdu.end(), "retx_pdu:");
+    logger.debug(pdu_buf.begin(), pdu_buf.end(), "retx_pdu:");
     logger.debug(pdus[nack.nack_sn].begin(), pdus[nack.nack_sn].end(), "pdus[{}]:", nack.nack_sn);
     EXPECT_TRUE(
-        std::equal(retx_pdu.begin() + header_size, retx_pdu.end(), pdus[nack.nack_sn].begin() + header_min_size + i));
+        std::equal(pdu_buf.begin() + header_size, pdu_buf.end(), pdus[nack.nack_sn].begin() + header_min_size + i));
     EXPECT_EQ(tester->bsr_count, n_bsr);
 
     // Check SI
-    rlc_si_field si, si_expect;
-    si = static_cast<rlc_si_field>((*retx_pdu.begin() >> 4) & 0b11);
+    rlc_si_field si;
+    rlc_si_field si_expect;
+    si = static_cast<rlc_si_field>((*pdu_buf.begin() >> 4) & 0b11);
     if (i == 0) {
       // first segment
       si_expect = rlc_si_field::first_segment;
@@ -791,13 +809,12 @@ TEST_P(rlc_tx_am_test, retx_pdu_with_segmentation)
 
 TEST_P(rlc_tx_am_test, retx_pdu_first_segment_without_segmentation)
 {
-  const uint32_t    sdu_size        = 3;
-  const uint32_t    header_min_size = sn_size == rlc_am_sn_size::size12bits ? 2 : 3;
-  const uint32_t    n_pdus          = 5;
-  byte_buffer_chain pdus[n_pdus];
+  const uint32_t sdu_size        = 4;
+  const uint32_t header_min_size = sn_size == rlc_am_sn_size::size12bits ? 2 : 3;
+  const uint32_t n_pdus          = 5;
 
-  tx_full_pdus(pdus, n_pdus, sdu_size);
-  uint32_t n_bsr = tester->bsr_count;
+  std::vector<std::vector<uint8_t>> pdus  = tx_full_pdus(n_pdus, sdu_size);
+  uint32_t                          n_bsr = tester->bsr_count;
 
   // NACK SN=3 0:1
   rlc_am_status_nack nack = {};
@@ -821,13 +838,12 @@ TEST_P(rlc_tx_am_test, retx_pdu_first_segment_without_segmentation)
   pdu_buf.resize(sdu_size + header_min_size);
   pdu_len = rlc->pull_pdu(pdu_buf);
   pdu_buf.resize(pdu_len);
-  byte_buffer_chain retx_pdu{byte_buffer{pdu_buf}};
-  logger.debug(retx_pdu.begin(), retx_pdu.end(), "retx_pdu:");
+  logger.debug(pdu_buf.begin(), pdu_buf.end(), "retx_pdu:");
   logger.debug(pdus[nack.nack_sn].begin(), pdus[nack.nack_sn].end(), "pdus[{}]:", nack.nack_sn);
   EXPECT_TRUE(
-      std::equal(retx_pdu.begin() + header_min_size, retx_pdu.end(), pdus[nack.nack_sn].begin() + header_min_size));
+      std::equal(pdu_buf.begin() + header_min_size, pdu_buf.end(), pdus[nack.nack_sn].begin() + header_min_size));
   // Check SI
-  EXPECT_EQ(static_cast<rlc_si_field>((*retx_pdu.begin() >> 4) & 0b11), rlc_si_field::first_segment);
+  EXPECT_EQ(static_cast<rlc_si_field>((*pdu_buf.begin() >> 4) & 0b11), rlc_si_field::first_segment);
   pcell_worker.run_pending_tasks();
   EXPECT_EQ(rlc->get_buffer_state(), 0);
   EXPECT_EQ(tester->bsr, nack.so_end - nack.so_start + 1 + header_min_size);
@@ -847,15 +863,14 @@ TEST_P(rlc_tx_am_test, retx_pdu_first_segment_without_segmentation)
 
 TEST_P(rlc_tx_am_test, retx_pdu_middle_segment_without_segmentation)
 {
-  const uint32_t    sdu_size        = 3;
-  const uint32_t    header_min_size = sn_size == rlc_am_sn_size::size12bits ? 2 : 3;
-  const uint32_t    so_size         = 2;
-  const uint32_t    header_max_size = header_min_size + so_size;
-  const uint32_t    n_pdus          = 5;
-  byte_buffer_chain pdus[n_pdus];
+  const uint32_t sdu_size        = 4;
+  const uint32_t header_min_size = sn_size == rlc_am_sn_size::size12bits ? 2 : 3;
+  const uint32_t so_size         = 2;
+  const uint32_t header_max_size = header_min_size + so_size;
+  const uint32_t n_pdus          = 5;
 
-  tx_full_pdus(pdus, n_pdus, sdu_size);
-  uint32_t n_bsr = tester->bsr_count;
+  std::vector<std::vector<uint8_t>> pdus  = tx_full_pdus(n_pdus, sdu_size);
+  uint32_t                          n_bsr = tester->bsr_count;
 
   // NACK SN=3 1:1
   rlc_am_status_nack nack = {};
@@ -879,14 +894,12 @@ TEST_P(rlc_tx_am_test, retx_pdu_middle_segment_without_segmentation)
   pdu_buf.resize(sdu_size + header_max_size);
   pdu_len = rlc->pull_pdu(pdu_buf);
   pdu_buf.resize(pdu_len);
-  byte_buffer_chain retx_pdu{byte_buffer{pdu_buf}};
-  logger.debug(retx_pdu.begin(), retx_pdu.end(), "retx_pdu:");
+  logger.debug(pdu_buf.begin(), pdu_buf.end(), "retx_pdu:");
   logger.debug(pdus[nack.nack_sn].begin(), pdus[nack.nack_sn].end(), "pdus[{}]:", nack.nack_sn);
-  EXPECT_TRUE(std::equal(retx_pdu.begin() + header_max_size,
-                         retx_pdu.end(),
-                         pdus[nack.nack_sn].begin() + header_min_size + nack.so_start));
+  EXPECT_TRUE(std::equal(
+      pdu_buf.begin() + header_max_size, pdu_buf.end(), pdus[nack.nack_sn].begin() + header_min_size + nack.so_start));
   // Check SI
-  EXPECT_EQ(static_cast<rlc_si_field>((*retx_pdu.begin() >> 4) & 0b11), rlc_si_field::middle_segment);
+  EXPECT_EQ(static_cast<rlc_si_field>((*pdu_buf.begin() >> 4) & 0b11), rlc_si_field::middle_segment);
   pcell_worker.run_pending_tasks();
   EXPECT_EQ(rlc->get_buffer_state(), 0);
   EXPECT_EQ(tester->bsr, nack.so_end - nack.so_start + 1 + header_max_size);
@@ -906,21 +919,20 @@ TEST_P(rlc_tx_am_test, retx_pdu_middle_segment_without_segmentation)
 
 TEST_P(rlc_tx_am_test, retx_pdu_last_segment_without_segmentation)
 {
-  const uint32_t    sdu_size        = 3;
-  const uint32_t    header_min_size = sn_size == rlc_am_sn_size::size12bits ? 2 : 3;
-  const uint32_t    so_size         = 2;
-  const uint32_t    header_max_size = header_min_size + so_size;
-  const uint32_t    n_pdus          = 5;
-  byte_buffer_chain pdus[n_pdus];
+  const uint32_t sdu_size        = 4;
+  const uint32_t header_min_size = sn_size == rlc_am_sn_size::size12bits ? 2 : 3;
+  const uint32_t so_size         = 2;
+  const uint32_t header_max_size = header_min_size + so_size;
+  const uint32_t n_pdus          = 5;
 
-  tx_full_pdus(pdus, n_pdus, sdu_size);
-  uint32_t n_bsr = tester->bsr_count;
+  std::vector<std::vector<uint8_t>> pdus  = tx_full_pdus(n_pdus, sdu_size);
+  uint32_t                          n_bsr = tester->bsr_count;
 
-  // NACK SN=3 1:2
+  // NACK SN=3 1:3
   rlc_am_status_nack nack = {};
   nack.nack_sn            = 3;
   nack.so_start           = 1;
-  nack.so_end             = 2;
+  nack.so_end             = 3;
   nack.has_so             = true;
   rlc_am_status_pdu status_pdu(sn_size);
   status_pdu.ack_sn = n_pdus;
@@ -938,14 +950,12 @@ TEST_P(rlc_tx_am_test, retx_pdu_last_segment_without_segmentation)
   pdu_buf.resize(sdu_size + header_max_size);
   pdu_len = rlc->pull_pdu(pdu_buf);
   pdu_buf.resize(pdu_len);
-  byte_buffer_chain retx_pdu{byte_buffer{pdu_buf}};
-  logger.debug(retx_pdu.begin(), retx_pdu.end(), "retx_pdu:");
+  logger.debug(pdu_buf.begin(), pdu_buf.end(), "retx_pdu:");
   logger.debug(pdus[nack.nack_sn].begin(), pdus[nack.nack_sn].end(), "pdus[{}]:", nack.nack_sn);
-  EXPECT_TRUE(std::equal(retx_pdu.begin() + header_max_size,
-                         retx_pdu.end(),
-                         pdus[nack.nack_sn].begin() + header_min_size + nack.so_start));
+  EXPECT_TRUE(std::equal(
+      pdu_buf.begin() + header_max_size, pdu_buf.end(), pdus[nack.nack_sn].begin() + header_min_size + nack.so_start));
   // Check SI
-  EXPECT_EQ(static_cast<rlc_si_field>((*retx_pdu.begin() >> 4) & 0b11), rlc_si_field::last_segment);
+  EXPECT_EQ(static_cast<rlc_si_field>((*pdu_buf.begin() >> 4) & 0b11), rlc_si_field::last_segment);
   pcell_worker.run_pending_tasks();
   EXPECT_EQ(rlc->get_buffer_state(), 0);
   EXPECT_EQ(tester->bsr, nack.so_end - nack.so_start + 1 + header_max_size);
@@ -963,21 +973,136 @@ TEST_P(rlc_tx_am_test, retx_pdu_last_segment_without_segmentation)
   EXPECT_EQ(tester->highest_delivered_pdcp_sn_list.front(), 2);
 }
 
-TEST_P(rlc_tx_am_test, retx_sn_under_segmentation)
+TEST_P(rlc_tx_am_test, retx_of_sn_under_segmentation_is_trimmed_to_already_sent_bytes)
 {
   const uint32_t n_sdus   = 5;
   const uint32_t sdu_size = 9;
 
   const uint32_t n_splits = 3;
 
-  const uint32_t    n_pdus      = n_sdus * n_splits - 1;
-  const uint32_t    header_size = (sn_size == rlc_am_sn_size::size12bits ? 2 : 3);
-  const uint32_t    so_size     = 2;
-  const uint32_t    pdu_size    = header_size + so_size + (sdu_size / n_splits);
-  byte_buffer_chain pdus[n_pdus];
+  const uint32_t n_pdus      = n_sdus * n_splits - 1;
+  const uint32_t header_size = (sn_size == rlc_am_sn_size::size12bits ? 2 : 3);
+  const uint32_t so_size     = 2;
+  const uint32_t pdu_size    = header_size + so_size + (sdu_size / n_splits);
 
   const uint32_t unsent_sdu_bytes = sdu_size / n_splits - so_size; // subtract 2 extra bytes from 1st segment (no SO)
-  tx_segmented_pdus(pdus, n_pdus, pdu_size, n_sdus, sdu_size, unsent_sdu_bytes + header_size + so_size);
+  tx_segmented_pdus(n_pdus, pdu_size, n_sdus, sdu_size, unsent_sdu_bytes + header_size + so_size);
+
+  // The rest of the SDU under segmentation is waiting for transmission
+  EXPECT_EQ(rlc->get_buffer_state(), unsent_sdu_bytes + header_size + so_size);
+
+  // NACK SN=4 2:65535 => this SN is currently under segmentation; ReTx only the parts that haven't been sent yet.
+  rlc_am_status_nack nack = {};
+  nack.nack_sn            = 4;
+  nack.has_so             = true;
+  nack.so_start           = so_size + (sdu_size / n_splits); // assume 1st segment is received properly
+  nack.so_end             = nack.so_end_of_sdu;              // the rest is missing
+  {
+    rlc_am_status_pdu status_pdu(sn_size);
+    status_pdu.ack_sn = n_sdus;
+    status_pdu.push_nack(nack);
+    rlc->on_status_pdu(std::move(status_pdu));
+  }
+  pcell_worker.run_pending_tasks();
+
+  const uint32_t retx_bytes = sdu_size - nack.so_start - unsent_sdu_bytes;
+  EXPECT_EQ(rlc->get_buffer_state(), unsent_sdu_bytes + header_size + so_size + header_size + so_size + retx_bytes);
+
+  // Read the ReTx segment which shall only include bytes that were already sent
+  std::vector<uint8_t> pdu_buf;
+  size_t               pdu_len;
+  pdu_buf.resize(header_size + so_size + retx_bytes);
+  pdu_len = rlc->pull_pdu(pdu_buf);
+  pdu_buf.resize(pdu_len);
+  EXPECT_EQ(pdu_len, header_size + so_size + retx_bytes);
+  EXPECT_EQ(rlc->get_buffer_state(), unsent_sdu_bytes + header_size + so_size);
+
+  // Read the rest of the SDU under segmentation that was not yet sent
+  EXPECT_EQ(rlc->get_buffer_state(), unsent_sdu_bytes + header_size + so_size);
+  pdu_buf.resize(unsent_sdu_bytes + header_size + so_size);
+  pdu_len = rlc->pull_pdu(pdu_buf);
+  pdu_buf.resize(pdu_len);
+
+  EXPECT_EQ(rlc->get_buffer_state(), 0);
+}
+
+TEST_P(rlc_tx_am_test, retx_of_sn_under_segmentation_is_ignored_for_unsent_bytes)
+{
+  const uint32_t n_sdus   = 5;
+  const uint32_t sdu_size = 9;
+
+  const uint32_t n_splits = 3;
+
+  const uint32_t n_pdus      = n_sdus * n_splits - 1;
+  const uint32_t header_size = (sn_size == rlc_am_sn_size::size12bits ? 2 : 3);
+  const uint32_t so_size     = 2;
+  const uint32_t pdu_size    = header_size + so_size + (sdu_size / n_splits);
+
+  const uint32_t unsent_sdu_bytes = sdu_size / n_splits - so_size; // subtract 2 extra bytes from 1st segment (no SO)
+  tx_segmented_pdus(n_pdus, pdu_size, n_sdus, sdu_size, unsent_sdu_bytes + header_size + so_size);
+
+  // The rest of the SDU under segmentation is waiting for transmission
+  EXPECT_EQ(rlc->get_buffer_state(), unsent_sdu_bytes + header_size + so_size);
+
+  // NACK SN=4 8:65535 => this SN is currently under segmentation; Ignore NACK of parts that haven't been sent yet.
+  rlc_am_status_nack nack = {};
+  nack.nack_sn            = 4;
+  nack.has_so             = true;
+  nack.so_start           = sdu_size - unsent_sdu_bytes; // assume 1st segment is received properly
+  nack.so_end             = nack.so_end_of_sdu;          // the rest is missing
+  {
+    rlc_am_status_pdu status_pdu(sn_size);
+    status_pdu.ack_sn = n_sdus;
+    status_pdu.push_nack(nack);
+    rlc->on_status_pdu(std::move(status_pdu));
+  }
+  pcell_worker.run_pending_tasks();
+
+  // Expect no ReTx was added
+  EXPECT_EQ(rlc->get_buffer_state(), unsent_sdu_bytes + header_size + so_size);
+
+  // NACK SN=4 99:65535 => Ignore NACK of out-of-bounds bytes of SDu under segmentation.
+  nack          = {};
+  nack.nack_sn  = 4;
+  nack.has_so   = true;
+  nack.so_start = 99;                 // out-of-bounds
+  nack.so_end   = nack.so_end_of_sdu; // the rest is missing
+  {
+    rlc_am_status_pdu status_pdu(sn_size);
+    status_pdu.ack_sn = n_sdus;
+    status_pdu.push_nack(nack);
+    rlc->on_status_pdu(std::move(status_pdu));
+  }
+  pcell_worker.run_pending_tasks();
+
+  // Expect no ReTx was added
+  EXPECT_EQ(rlc->get_buffer_state(), unsent_sdu_bytes + header_size + so_size);
+
+  // Read the rest of the SDU under segmentation that was not yet sent
+  std::vector<uint8_t> pdu_buf;
+  size_t               pdu_len;
+  EXPECT_EQ(rlc->get_buffer_state(), unsent_sdu_bytes + header_size + so_size);
+  pdu_buf.resize(unsent_sdu_bytes + header_size + so_size);
+  pdu_len = rlc->pull_pdu(pdu_buf);
+  pdu_buf.resize(pdu_len);
+
+  EXPECT_EQ(rlc->get_buffer_state(), 0);
+}
+
+TEST_P(rlc_tx_am_test, retx_only_sent_bytes_of_sn_under_segmentation)
+{
+  const uint32_t n_sdus   = 5;
+  const uint32_t sdu_size = 9;
+
+  const uint32_t n_splits = 3;
+
+  const uint32_t n_pdus      = n_sdus * n_splits - 1;
+  const uint32_t header_size = (sn_size == rlc_am_sn_size::size12bits ? 2 : 3);
+  const uint32_t so_size     = 2;
+  const uint32_t pdu_size    = header_size + so_size + (sdu_size / n_splits);
+
+  const uint32_t unsent_sdu_bytes = sdu_size / n_splits - so_size; // subtract 2 extra bytes from 1st segment (no SO)
+  tx_segmented_pdus(n_pdus, pdu_size, n_sdus, sdu_size, unsent_sdu_bytes + header_size + so_size);
 
   // NACK SN=4 2:65535 => this SN is currently under segmentation; ReTx only the parts that haven't been sent yet.
   rlc_am_status_nack nack = {};
@@ -1003,6 +1128,7 @@ TEST_P(rlc_tx_am_test, retx_sn_under_segmentation)
   pdu_len = rlc->pull_pdu(pdu_buf);
   pdu_buf.resize(pdu_len);
   EXPECT_EQ(pdu_len, header_size + so_size + retx_bytes);
+  EXPECT_EQ(rlc->get_buffer_state(), unsent_sdu_bytes + header_size + so_size);
 
   // read the rest of the SDU under segmentation that was not yet sent
   EXPECT_EQ(rlc->get_buffer_state(), unsent_sdu_bytes + header_size + so_size);
@@ -1015,19 +1141,18 @@ TEST_P(rlc_tx_am_test, retx_sn_under_segmentation)
 
 TEST_P(rlc_tx_am_test, retx_pdu_segment_invalid_so_start_and_so_end)
 {
-  const uint32_t    sdu_size        = 3;
-  const uint32_t    header_min_size = sn_size == rlc_am_sn_size::size12bits ? 2 : 3;
-  const uint32_t    n_pdus          = 5;
-  byte_buffer_chain pdus[n_pdus];
+  const uint32_t sdu_size        = 4;
+  const uint32_t header_min_size = sn_size == rlc_am_sn_size::size12bits ? 2 : 3;
+  const uint32_t n_pdus          = 5;
 
-  tx_full_pdus(pdus, n_pdus, sdu_size);
-  uint32_t n_bsr = tester->bsr_count;
+  std::vector<std::vector<uint8_t>> pdus  = tx_full_pdus(n_pdus, sdu_size);
+  uint32_t                          n_bsr = tester->bsr_count;
 
-  // NACK SN=3 3:3
+  // NACK SN=3 4:4
   rlc_am_status_nack nack = {};
   nack.nack_sn            = 3;
-  nack.so_start           = 3; // out of bounds
-  nack.so_end             = 3; // out of bounds
+  nack.so_start           = 4; // out of bounds
+  nack.so_end             = 4; // out of bounds
   nack.has_so             = true;
   rlc_am_status_pdu status_pdu(sn_size);
   status_pdu.ack_sn = n_pdus;
@@ -1045,13 +1170,12 @@ TEST_P(rlc_tx_am_test, retx_pdu_segment_invalid_so_start_and_so_end)
   pdu_buf.resize(sdu_size + header_min_size);
   pdu_len = rlc->pull_pdu(pdu_buf);
   pdu_buf.resize(pdu_len);
-  byte_buffer_chain retx_pdu{byte_buffer{pdu_buf}};
-  logger.debug(retx_pdu.begin(), retx_pdu.end(), "retx_pdu:");
+  logger.debug(pdu_buf.begin(), pdu_buf.end(), "retx_pdu:");
   logger.debug(pdus[nack.nack_sn].begin(), pdus[nack.nack_sn].end(), "pdus[{}]:", nack.nack_sn);
   EXPECT_TRUE(
-      std::equal(retx_pdu.begin() + header_min_size, retx_pdu.end(), pdus[nack.nack_sn].begin() + header_min_size));
+      std::equal(pdu_buf.begin() + header_min_size, pdu_buf.end(), pdus[nack.nack_sn].begin() + header_min_size));
   // Check SI
-  EXPECT_EQ(static_cast<rlc_si_field>((*retx_pdu.begin() >> 4) & 0b11), rlc_si_field::full_sdu);
+  EXPECT_EQ(static_cast<rlc_si_field>((*pdu_buf.begin() >> 4) & 0b11), rlc_si_field::full_sdu);
   pcell_worker.run_pending_tasks();
   EXPECT_EQ(rlc->get_buffer_state(), 0);
   EXPECT_EQ(tester->bsr, sdu_size + header_min_size);
@@ -1071,13 +1195,12 @@ TEST_P(rlc_tx_am_test, retx_pdu_segment_invalid_so_start_and_so_end)
 
 TEST_P(rlc_tx_am_test, retx_pdu_segment_invalid_so_start_larger_than_so_end)
 {
-  const uint32_t    sdu_size        = 3;
-  const uint32_t    header_min_size = sn_size == rlc_am_sn_size::size12bits ? 2 : 3;
-  const uint32_t    n_pdus          = 5;
-  byte_buffer_chain pdus[n_pdus];
+  const uint32_t sdu_size        = 4;
+  const uint32_t header_min_size = sn_size == rlc_am_sn_size::size12bits ? 2 : 3;
+  const uint32_t n_pdus          = 5;
 
-  tx_full_pdus(pdus, n_pdus, sdu_size);
-  uint32_t n_bsr = tester->bsr_count;
+  std::vector<std::vector<uint8_t>> pdus  = tx_full_pdus(n_pdus, sdu_size);
+  uint32_t                          n_bsr = tester->bsr_count;
 
   // NACK SN=3 3:2
   rlc_am_status_nack nack = {};
@@ -1101,11 +1224,10 @@ TEST_P(rlc_tx_am_test, retx_pdu_segment_invalid_so_start_larger_than_so_end)
   pdu_buf.resize(sdu_size + header_min_size);
   pdu_len = rlc->pull_pdu(pdu_buf);
   pdu_buf.resize(pdu_len);
-  byte_buffer_chain retx_pdu{byte_buffer{pdu_buf}};
-  logger.debug(retx_pdu.begin(), retx_pdu.end(), "retx_pdu:");
+  logger.debug(pdu_buf.begin(), pdu_buf.end(), "retx_pdu:");
   logger.debug(pdus[nack.nack_sn].begin(), pdus[nack.nack_sn].end(), "pdus[{}]:", nack.nack_sn);
   EXPECT_TRUE(
-      std::equal(retx_pdu.begin() + header_min_size, retx_pdu.end(), pdus[nack.nack_sn].begin() + header_min_size));
+      std::equal(pdu_buf.begin() + header_min_size, pdu_buf.end(), pdus[nack.nack_sn].begin() + header_min_size));
   pcell_worker.run_pending_tasks();
   EXPECT_EQ(rlc->get_buffer_state(), 0);
   EXPECT_EQ(tester->bsr, nack.so_end + 1 + header_min_size);
@@ -1123,13 +1245,47 @@ TEST_P(rlc_tx_am_test, retx_pdu_segment_invalid_so_start_larger_than_so_end)
   EXPECT_EQ(tester->highest_delivered_pdcp_sn_list.front(), 2);
 }
 
+TEST_P(rlc_tx_am_test, retx_many_pdus_and_notify_mac)
+{
+  const uint32_t sdu_size        = 1500;
+  const uint32_t header_min_size = sn_size == rlc_am_sn_size::size12bits ? 2 : 3;
+  const uint32_t n_pdus          = MAX_DL_PDU_LENGTH / sdu_size + 1;
+
+  std::vector<std::vector<uint8_t>> pdus  = tx_full_pdus(n_pdus, sdu_size);
+  uint32_t                          n_bsr = tester->bsr_count;
+
+  // NACK everything
+  rlc_am_status_pdu status_pdu(sn_size);
+  status_pdu.ack_sn = n_pdus;
+
+  for (uint32_t nack_sn = 0; nack_sn < n_pdus; nack_sn++) {
+    rlc_am_status_nack nack = {};
+    nack.nack_sn            = nack_sn;
+    status_pdu.push_nack(nack);
+  }
+  rlc->on_status_pdu(std::move(status_pdu));
+  pcell_worker.run_pending_tasks();
+  EXPECT_EQ(rlc->get_buffer_state(), n_pdus * (sdu_size + header_min_size));
+  EXPECT_EQ(tester->bsr, n_pdus * (sdu_size + header_min_size));
+  EXPECT_EQ(tester->bsr_count, ++n_bsr);
+
+  // Verify transmit notification for queued SDUs
+  ASSERT_EQ(tester->highest_transmitted_pdcp_sn_list.size(), n_pdus);
+  for (uint32_t pdcp_sn = 0; pdcp_sn < n_pdus; pdcp_sn++) {
+    EXPECT_EQ(tester->highest_transmitted_pdcp_sn_list.front(), pdcp_sn);
+    tester->highest_transmitted_pdcp_sn_list.pop_front();
+  }
+
+  // Verify delivery notification for fully ACK'ed SDUs is zero
+  ASSERT_EQ(tester->highest_delivered_pdcp_sn_list.size(), 0);
+}
+
 TEST_P(rlc_tx_am_test, invalid_nack_nack_sn_outside_rx_window)
 {
-  const uint32_t    sdu_size = 3;
-  const uint32_t    n_pdus   = 12;
-  byte_buffer_chain pdus[n_pdus];
+  const uint32_t sdu_size = 4;
+  const uint32_t n_pdus   = 12;
 
-  tx_full_pdus(pdus, n_pdus, sdu_size);
+  std::vector<std::vector<uint8_t>> pdus = tx_full_pdus(n_pdus, sdu_size);
 
   // ACK up until 5
   rlc_am_status_pdu status_pdu0(sn_size);
@@ -1177,11 +1333,10 @@ TEST_P(rlc_tx_am_test, invalid_nack_nack_sn_outside_rx_window)
 
 TEST_P(rlc_tx_am_test, invalid_nack_sn_larger_than_ack_sn)
 {
-  const uint32_t    sdu_size = 3;
-  const uint32_t    n_pdus   = 12;
-  byte_buffer_chain pdus[n_pdus];
+  const uint32_t sdu_size = 4;
+  const uint32_t n_pdus   = 12;
 
-  tx_full_pdus(pdus, n_pdus, sdu_size);
+  std::vector<std::vector<uint8_t>> pdus = tx_full_pdus(n_pdus, sdu_size);
 
   // ACK up until 5
   rlc_am_status_pdu status_pdu0(sn_size);
@@ -1254,13 +1409,12 @@ TEST_P(rlc_tx_am_test, invalid_nack_sn_larger_than_ack_sn)
 
 TEST_P(rlc_tx_am_test, retx_insufficient_space)
 {
-  const uint32_t    sdu_size        = 3;
-  const uint32_t    header_min_size = sn_size == rlc_am_sn_size::size12bits ? 2 : 3;
-  const uint32_t    short_size      = header_min_size;
-  const uint32_t    n_pdus          = 5;
-  byte_buffer_chain pdus[n_pdus];
+  const uint32_t sdu_size        = 4;
+  const uint32_t header_min_size = sn_size == rlc_am_sn_size::size12bits ? 2 : 3;
+  const uint32_t short_size      = header_min_size;
+  const uint32_t n_pdus          = 5;
 
-  tx_full_pdus(pdus, n_pdus, sdu_size);
+  std::vector<std::vector<uint8_t>> pdus = tx_full_pdus(n_pdus, sdu_size);
   EXPECT_EQ(rlc->get_buffer_state(), 0);
   uint32_t n_bsr = tester->bsr_count;
 
@@ -1302,10 +1456,9 @@ TEST_P(rlc_tx_am_test, retx_insufficient_space)
 
 TEST_P(rlc_tx_am_test, retx_pdu_range_without_segmentation)
 {
-  const uint32_t    sdu_size        = 3;
-  const uint32_t    header_min_size = sn_size == rlc_am_sn_size::size12bits ? 2 : 3;
-  const uint32_t    n_pdus          = 5;
-  byte_buffer_chain pdus[n_pdus];
+  const uint32_t sdu_size        = 4;
+  const uint32_t header_min_size = sn_size == rlc_am_sn_size::size12bits ? 2 : 3;
+  const uint32_t n_pdus          = 5;
 
   uint32_t sn_start = cardinality(to_number(sn_size)) - 2;
   uint32_t nack_sn  = sn_start + 1;
@@ -1318,8 +1471,8 @@ TEST_P(rlc_tx_am_test, retx_pdu_range_without_segmentation)
   st.poll_sn         = sn_start;
   rlc->set_state(st);
 
-  tx_full_pdus(pdus, n_pdus, sdu_size);
-  uint32_t n_bsr = tester->bsr_count;
+  std::vector<std::vector<uint8_t>> pdus  = tx_full_pdus(n_pdus, sdu_size);
+  uint32_t                          n_bsr = tester->bsr_count;
 
   // NACK SN=nack_sn..nack_sn+range-1
   rlc_am_status_nack nack = {};
@@ -1343,10 +1496,9 @@ TEST_P(rlc_tx_am_test, retx_pdu_range_without_segmentation)
     pdu_buf.resize(sdu_size + header_min_size);
     pdu_len = rlc->pull_pdu(pdu_buf);
     pdu_buf.resize(pdu_len);
-    byte_buffer_chain retx_pdu{byte_buffer{pdu_buf}};
-    logger.debug(retx_pdu.begin(), retx_pdu.end(), "retx_pdu:");
+    logger.debug(pdu_buf.begin(), pdu_buf.end(), "retx_pdu:");
     logger.debug(pdus[i - sn_start].begin(), pdus[i - sn_start].end(), "pdus[{}]:", i - sn_start);
-    EXPECT_TRUE(std::equal(retx_pdu.begin() + 1, retx_pdu.end(), pdus[i - sn_start].begin() + 1)); // skip header P bit
+    EXPECT_TRUE(std::equal(pdu_buf.begin() + 1, pdu_buf.end(), pdus[i - sn_start].begin() + 1)); // skip header P bit
     EXPECT_EQ(rlc->get_buffer_state(), (nack_sn + range - 1 - i) * (sdu_size + header_min_size));
     EXPECT_EQ(tester->bsr, range * (sdu_size + header_min_size));
     EXPECT_EQ(tester->bsr_count, n_bsr);
@@ -1366,10 +1518,9 @@ TEST_P(rlc_tx_am_test, retx_pdu_range_without_segmentation)
 
 TEST_P(rlc_tx_am_test, retx_pdu_range_wraparound)
 {
-  const uint32_t    sdu_size        = 3;
-  const uint32_t    header_min_size = sn_size == rlc_am_sn_size::size12bits ? 2 : 3;
-  const uint32_t    n_pdus          = 5;
-  byte_buffer_chain pdus[n_pdus];
+  const uint32_t sdu_size        = 4;
+  const uint32_t header_min_size = sn_size == rlc_am_sn_size::size12bits ? 2 : 3;
+  const uint32_t n_pdus          = 5;
 
   uint32_t sn_start = cardinality(to_number(sn_size)) - 2;
   uint32_t nack_sn  = sn_start + 1;
@@ -1382,8 +1533,8 @@ TEST_P(rlc_tx_am_test, retx_pdu_range_wraparound)
   st.poll_sn         = sn_start;
   rlc->set_state(st);
 
-  tx_full_pdus(pdus, n_pdus, sdu_size);
-  uint32_t n_bsr = tester->bsr_count;
+  std::vector<std::vector<uint8_t>> pdus  = tx_full_pdus(n_pdus, sdu_size);
+  uint32_t                          n_bsr = tester->bsr_count;
 
   // NACK SN=nack_sn..nack_sn+range-1
   rlc_am_status_nack nack = {};
@@ -1407,13 +1558,12 @@ TEST_P(rlc_tx_am_test, retx_pdu_range_wraparound)
     pdu_buf.resize(sdu_size + header_min_size);
     pdu_len = rlc->pull_pdu(pdu_buf);
     pdu_buf.resize(pdu_len);
-    byte_buffer_chain retx_pdu{byte_buffer{pdu_buf}};
-    logger.debug(retx_pdu.begin(), retx_pdu.end(), "retx_pdu:");
+    logger.debug(pdu_buf.begin(), pdu_buf.end(), "retx_pdu:");
     logger.debug(pdus[i - sn_start].begin(), pdus[i - sn_start].end(), "pdus[{}]:", i - sn_start);
-    ASSERT_EQ(retx_pdu.length(), pdus[i - sn_start].length());
+    ASSERT_EQ(pdu_buf.size(), pdus[i - sn_start].size());
     // compare PDUs, ignore P bit in first header byte
-    EXPECT_EQ(*retx_pdu.begin() & 0x4, *pdus[i - sn_start].begin() & 0x4);                         // mask P bit
-    EXPECT_TRUE(std::equal(retx_pdu.begin() + 1, retx_pdu.end(), pdus[i - sn_start].begin() + 1)); // check rest
+    EXPECT_EQ(*pdu_buf.begin() & 0x4, *pdus[i - sn_start].begin() & 0x4);                        // mask P bit
+    EXPECT_TRUE(std::equal(pdu_buf.begin() + 1, pdu_buf.end(), pdus[i - sn_start].begin() + 1)); // check rest
     EXPECT_EQ(rlc->get_buffer_state(), (nack_sn + range - 1 - i) * (sdu_size + header_min_size));
     EXPECT_EQ(tester->bsr, range * (sdu_size + header_min_size));
     EXPECT_EQ(tester->bsr_count, n_bsr);
@@ -1466,12 +1616,12 @@ TEST_P(rlc_tx_am_test, buffer_state_considers_status_report)
 TEST_P(rlc_tx_am_test, status_report_priority)
 {
   // First push one SDU into RLC to also check precedence of status report
-  const uint32_t sdu_size        = 1;
+  const uint32_t sdu_size        = 4;
   const uint32_t header_min_size = sn_size == rlc_am_sn_size::size12bits ? 2 : 3;
   const uint32_t pdu_size        = header_min_size + sdu_size;
 
   EXPECT_EQ(rlc->get_buffer_state(), 0);
-  rlc->handle_sdu(create_rlc_sdu(0, sdu_size));
+  rlc->handle_sdu(test_helpers::create_pdcp_pdu(config.pdcp_sn_len, 0, sdu_size), false);
   pcell_worker.run_pending_tasks();
   EXPECT_EQ(rlc->get_buffer_state(), pdu_size);
   EXPECT_EQ(tester->bsr, pdu_size);
@@ -1569,14 +1719,12 @@ TEST_P(rlc_tx_am_test, status_report_trim)
 
 TEST_P(rlc_tx_am_test, expired_poll_retransmit_timer_triggers_retx)
 {
-  const uint32_t    n_pdus = 5;
-  byte_buffer_chain pdus[n_pdus];
-
+  const uint32_t n_pdus          = 5;
   const uint32_t sdu_size        = 10;
   const uint32_t header_min_size = sn_size == rlc_am_sn_size::size12bits ? 2 : 3;
   const uint32_t pdu_size        = header_min_size + sdu_size;
 
-  tx_full_pdus(pdus, n_pdus, sdu_size);
+  tx_full_pdus(n_pdus, sdu_size);
   uint32_t expect_mac_bsr = tester->bsr;
   uint32_t n_bsr          = tester->bsr_count;
 
@@ -1602,7 +1750,8 @@ TEST_P(rlc_tx_am_test, expired_poll_retransmit_timer_triggers_retx)
     pdu_len = rlc->pull_pdu(pdu_buf);
     pdu_buf.resize(pdu_len);
     rlc_am_pdu_header pdu_hdr = {};
-    ASSERT_TRUE(rlc_am_read_data_pdu_header(byte_buffer(pdu_buf.begin(), pdu_buf.end()), sn_size, &pdu_hdr));
+    ASSERT_TRUE(
+        rlc_am_read_data_pdu_header(byte_buffer::create(pdu_buf.begin(), pdu_buf.end()).value(), sn_size, &pdu_hdr));
     EXPECT_TRUE(pdu_hdr.p);
     EXPECT_EQ(tester->bsr, pdu_size);
     EXPECT_EQ(tester->bsr_count, n_bsr);
@@ -1617,7 +1766,8 @@ TEST_P(rlc_tx_am_test, expired_poll_retransmit_timer_triggers_retx)
     pdu_len = rlc->pull_pdu(pdu_buf);
     pdu_buf.resize(pdu_len);
     rlc_am_pdu_header pdu_hdr = {};
-    ASSERT_TRUE(rlc_am_read_data_pdu_header(byte_buffer(pdu_buf.begin(), pdu_buf.end()), sn_size, &pdu_hdr));
+    ASSERT_TRUE(
+        rlc_am_read_data_pdu_header(byte_buffer::create(pdu_buf.begin(), pdu_buf.end()).value(), sn_size, &pdu_hdr));
     EXPECT_FALSE(pdu_hdr.p);
     EXPECT_EQ(tester->bsr, pdu_size);
     EXPECT_EQ(tester->bsr_count, n_bsr);
@@ -1632,7 +1782,8 @@ TEST_P(rlc_tx_am_test, expired_poll_retransmit_timer_triggers_retx)
     pdu_len = rlc->pull_pdu(pdu_buf);
     pdu_buf.resize(pdu_len);
     rlc_am_pdu_header pdu_hdr = {};
-    ASSERT_TRUE(rlc_am_read_data_pdu_header(byte_buffer(pdu_buf.begin(), pdu_buf.end()), sn_size, &pdu_hdr));
+    ASSERT_TRUE(
+        rlc_am_read_data_pdu_header(byte_buffer::create(pdu_buf.begin(), pdu_buf.end()).value(), sn_size, &pdu_hdr));
     EXPECT_TRUE(pdu_hdr.p);
     EXPECT_EQ(tester->bsr, pdu_size);
     EXPECT_EQ(tester->bsr_count, n_bsr);
@@ -1641,20 +1792,17 @@ TEST_P(rlc_tx_am_test, expired_poll_retransmit_timer_triggers_retx)
 
 TEST_P(rlc_tx_am_test, expired_poll_retransmit_timer_sets_polling_bit)
 {
-  const uint32_t    n_pdus = 5;
-  byte_buffer_chain pdus[n_pdus];
-
+  const uint32_t n_pdus          = 5;
   const uint32_t sdu_size        = 10;
   const uint32_t header_min_size = sn_size == rlc_am_sn_size::size12bits ? 2 : 3;
   const uint32_t pdu_size        = header_min_size + sdu_size;
 
-  tx_full_pdus(pdus, n_pdus, sdu_size);
+  tx_full_pdus(n_pdus, sdu_size);
 
   // push SDU to SDU queue so that it is not empty
   uint32_t    n_bsr   = tester->bsr_count;
-  byte_buffer sdu_buf = create_sdu(sdu_size, 7);
-  rlc_sdu     sdu     = {sdu_buf.deep_copy(), /* pdcp_sn = */ 7}; // no std::move - keep local copy for later comparison
-  rlc->handle_sdu(std::move(sdu));
+  byte_buffer sdu_buf = test_helpers::create_pdcp_pdu(config.pdcp_sn_len, 7, sdu_size, 7);
+  rlc->handle_sdu(sdu_buf.deep_copy().value(), false); // keep local copy for later comparison
   pcell_worker.run_pending_tasks();
   EXPECT_EQ(rlc->get_buffer_state(), pdu_size);
   EXPECT_EQ(tester->bsr_count, ++n_bsr);
@@ -1669,7 +1817,8 @@ TEST_P(rlc_tx_am_test, expired_poll_retransmit_timer_sets_polling_bit)
     pdu_len = rlc->pull_pdu(pdu_buf);
     pdu_buf.resize(pdu_len);
     rlc_am_pdu_header pdu_hdr = {};
-    ASSERT_TRUE(rlc_am_read_data_pdu_header(byte_buffer(pdu_buf.begin(), pdu_buf.end()), sn_size, &pdu_hdr));
+    ASSERT_TRUE(
+        rlc_am_read_data_pdu_header(byte_buffer::create(pdu_buf.begin(), pdu_buf.end()).value(), sn_size, &pdu_hdr));
     EXPECT_FALSE(pdu_hdr.p);
   }
 
@@ -1696,7 +1845,8 @@ TEST_P(rlc_tx_am_test, expired_poll_retransmit_timer_sets_polling_bit)
     pdu_len = rlc->pull_pdu(pdu_buf);
     pdu_buf.resize(pdu_len);
     rlc_am_pdu_header pdu_hdr = {};
-    ASSERT_TRUE(rlc_am_read_data_pdu_header(byte_buffer(pdu_buf.begin(), pdu_buf.end()), sn_size, &pdu_hdr));
+    ASSERT_TRUE(
+        rlc_am_read_data_pdu_header(byte_buffer::create(pdu_buf.begin(), pdu_buf.end()).value(), sn_size, &pdu_hdr));
     EXPECT_TRUE(pdu_hdr.p);
   }
 
@@ -1709,7 +1859,8 @@ TEST_P(rlc_tx_am_test, expired_poll_retransmit_timer_sets_polling_bit)
     pdu_len = rlc->pull_pdu(pdu_buf);
     pdu_buf.resize(pdu_len);
     rlc_am_pdu_header pdu_hdr = {};
-    ASSERT_TRUE(rlc_am_read_data_pdu_header(byte_buffer(pdu_buf.begin(), pdu_buf.end()), sn_size, &pdu_hdr));
+    ASSERT_TRUE(
+        rlc_am_read_data_pdu_header(byte_buffer::create(pdu_buf.begin(), pdu_buf.end()).value(), sn_size, &pdu_hdr));
     EXPECT_FALSE(pdu_hdr.p);
   }
 
@@ -1722,21 +1873,20 @@ TEST_P(rlc_tx_am_test, expired_poll_retransmit_timer_sets_polling_bit)
     pdu_len = rlc->pull_pdu(pdu_buf);
     pdu_buf.resize(pdu_len);
     rlc_am_pdu_header pdu_hdr = {};
-    ASSERT_TRUE(rlc_am_read_data_pdu_header(byte_buffer(pdu_buf.begin(), pdu_buf.end()), sn_size, &pdu_hdr));
+    ASSERT_TRUE(
+        rlc_am_read_data_pdu_header(byte_buffer::create(pdu_buf.begin(), pdu_buf.end()).value(), sn_size, &pdu_hdr));
     EXPECT_TRUE(pdu_hdr.p);
   }
 }
 
 TEST_P(rlc_tx_am_test, expired_poll_retransmit_increments_retx_counter)
 {
-  const uint32_t    n_pdus = 5;
-  byte_buffer_chain pdus[n_pdus];
-
+  const uint32_t n_pdus          = 5;
   const uint32_t sdu_size        = 10;
   const uint32_t header_min_size = sn_size == rlc_am_sn_size::size12bits ? 2 : 3;
   const uint32_t pdu_size        = header_min_size + sdu_size;
 
-  tx_full_pdus(pdus, n_pdus, sdu_size);
+  tx_full_pdus(n_pdus, sdu_size);
 
   for (uint32_t n_retx = 0; n_retx <= config.max_retx_thresh; n_retx++) {
     uint32_t expect_mac_bsr = tester->bsr;
@@ -1748,7 +1898,7 @@ TEST_P(rlc_tx_am_test, expired_poll_retransmit_increments_retx_counter)
     // advance timers to expire poll_retransmit_timer
     for (int32_t i = 0; i < config.t_poll_retx; i++) {
       EXPECT_EQ(rlc->get_buffer_state(), 0);
-      EXPECT_EQ(tester->bsr, expect_mac_bsr) << "n_retx=" << n_retx << " i=" << i << std::endl;
+      EXPECT_EQ(tester->bsr, expect_mac_bsr) << "n_retx=" << n_retx << " i=" << i << "\n";
       EXPECT_EQ(tester->bsr_count, n_bsr);
       tick();
     }
@@ -1767,7 +1917,8 @@ TEST_P(rlc_tx_am_test, expired_poll_retransmit_increments_retx_counter)
       pdu_len = rlc->pull_pdu(pdu_buf);
       pdu_buf.resize(pdu_len);
       rlc_am_pdu_header pdu_hdr = {};
-      ASSERT_TRUE(rlc_am_read_data_pdu_header(byte_buffer(pdu_buf.begin(), pdu_buf.end()), sn_size, &pdu_hdr));
+      ASSERT_TRUE(
+          rlc_am_read_data_pdu_header(byte_buffer::create(pdu_buf.begin(), pdu_buf.end()).value(), sn_size, &pdu_hdr));
       EXPECT_TRUE(pdu_hdr.p);
       EXPECT_EQ(tester->bsr, pdu_size);
       EXPECT_EQ(tester->bsr_count, n_bsr);
@@ -1780,12 +1931,11 @@ TEST_P(rlc_tx_am_test, expired_poll_retransmit_increments_retx_counter)
 
 TEST_P(rlc_tx_am_test, retx_count_ignores_pending_retx)
 {
-  const uint32_t    sdu_size        = 3;
-  const uint32_t    header_min_size = sn_size == rlc_am_sn_size::size12bits ? 2 : 3;
-  const uint32_t    n_pdus          = 5;
-  byte_buffer_chain pdus[n_pdus];
+  const uint32_t sdu_size        = 4;
+  const uint32_t header_min_size = sn_size == rlc_am_sn_size::size12bits ? 2 : 3;
+  const uint32_t n_pdus          = 5;
 
-  tx_full_pdus(pdus, n_pdus, sdu_size);
+  tx_full_pdus(n_pdus, sdu_size);
   uint32_t n_bsr = tester->bsr_count;
 
   for (uint32_t n_retx = 0; n_retx <= config.max_retx_thresh; n_retx++) {
@@ -1817,12 +1967,11 @@ TEST_P(rlc_tx_am_test, retx_count_ignores_pending_retx)
 
 TEST_P(rlc_tx_am_test, retx_count_trigger_max_retx_without_segmentation)
 {
-  const uint32_t    sdu_size        = 3;
-  const uint32_t    header_min_size = sn_size == rlc_am_sn_size::size12bits ? 2 : 3;
-  const uint32_t    n_pdus          = 5;
-  byte_buffer_chain pdus[n_pdus];
+  const uint32_t sdu_size        = 4;
+  const uint32_t header_min_size = sn_size == rlc_am_sn_size::size12bits ? 2 : 3;
+  const uint32_t n_pdus          = 5;
 
-  tx_full_pdus(pdus, n_pdus, sdu_size);
+  tx_full_pdus(n_pdus, sdu_size);
   uint32_t n_bsr = tester->bsr_count;
 
   for (uint32_t n_retx = 0; n_retx <= config.max_retx_thresh; n_retx++) {
@@ -1880,3 +2029,9 @@ INSTANTIATE_TEST_SUITE_P(rlc_tx_am_test_each_sn_size,
                          rlc_tx_am_test,
                          ::testing::Values(rlc_am_sn_size::size12bits, rlc_am_sn_size::size18bits),
                          test_param_info_to_string);
+
+int main(int argc, char** argv)
+{
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
+}

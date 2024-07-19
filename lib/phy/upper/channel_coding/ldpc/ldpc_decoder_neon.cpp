@@ -86,7 +86,7 @@ void ldpc_decoder_neon::compute_var_to_check_msgs(span<log_likelihood_ratio>    
     int8x16_t c2v_s8  = check_to_var_neon.get_at(i_block);
 
     // v2c = (soft - c2v > LLR_MAX) ? LLR_MAX : (soft - c2v)
-    int8x16_t help_sub_s8 = vsubq_s8(soft_s8, c2v_s8);
+    int8x16_t help_sub_s8 = vqsubq_s8(soft_s8, c2v_s8);
     int8x16_t v2c_s8      = vminq_s8(help_sub_s8, LLR_MAX_s8());
 
     // v2c = (v2c < MIN_LLR) ? MIN_LLR : v2c
@@ -231,7 +231,7 @@ void ldpc_decoder_neon::compute_soft_bits(span<log_likelihood_ratio>       this_
   }
 }
 
-void ldpc_decoder_neon::get_hard_bits(bit_buffer& out)
+bool ldpc_decoder_neon::get_hard_bits(bit_buffer& out)
 {
   // Buffer to hold the soft bits.
   std::array<log_likelihood_ratio, MAX_LIFTING_SIZE * MAX_BG_K> temp_llr;
@@ -259,5 +259,5 @@ void ldpc_decoder_neon::get_hard_bits(bit_buffer& out)
   span<const log_likelihood_ratio> llr_read_buffer(temp_llr.begin(), llr_write_buffer.begin());
 
   // Convert to hard bits.
-  hard_decision(out, llr_read_buffer);
+  return hard_decision(out, llr_read_buffer);
 }

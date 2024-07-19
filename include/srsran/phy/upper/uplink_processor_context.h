@@ -43,7 +43,15 @@ struct ul_pucch_context {
   /// PUCCH format type.
   pucch_format format;
   /// Format 0 or Format 1 context.
-  optional<ul_pucch_f0_f1_context> context_f0_f1;
+  std::optional<ul_pucch_f0_f1_context> context_f0_f1;
+};
+
+/// Sounding Reference Signals context.
+struct ul_srs_context {
+  /// Slot description (also specifies the numerology).
+  slot_point slot;
+  /// Radio Network Temporary Identifier (RNTI).
+  rnti_t rnti;
 };
 
 } // namespace srsran

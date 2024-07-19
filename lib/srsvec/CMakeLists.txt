@@ -33,10 +33,10 @@ set(SOURCES
         prod.cpp
         sc_prod.cpp
         subtract.cpp
+        unwrap.cpp
 )
 
 add_library(srsvec STATIC ${SOURCES})
 target_link_libraries(srsvec srslog)
 
-install(TARGETS srsvec
-        EXPORT srsran_export)
+add_to_exported_libs(srsvec)

@@ -25,8 +25,9 @@
 #include "../support/mcs_calculator.h"
 #include "../support/pdcch_aggregation_level_calculator.h"
 #include "../support/prbs_calculator.h"
-#include "../support/sch_pdu_builder.h"
+#include "srsran/ran/sch/tbs_calculator.h"
 #include "srsran/scheduler/scheduler_feedback_handler.h"
+#include "srsran/srslog/srslog.h"
 
 using namespace srsran;
 
@@ -53,6 +54,7 @@ ue_cell::ue_cell(du_ue_index_t                ue_index_,
   ue_mcs_calculator(ue_cell_cfg_.cell_cfg_common, channel_state)
 {
 }
+
 void ue_cell::deactivate()
 {
   // Stop UL HARQ retransmissions.
@@ -69,18 +71,30 @@ void ue_cell::handle_reconfiguration_request(const ue_cell_configuration& ue_cel
   ue_cfg = &ue_cell_cfg;
 }
 
-dl_harq_process::dl_ack_info_result ue_cell::handle_dl_ack_info(slot_point                 uci_slot,
-                                                                mac_harq_ack_report_status ack_value,
-                                                                unsigned                   harq_bit_idx,
-                                                                optional<float>            pucch_snr)
+void ue_cell::set_fallback_state(bool set_fallback)
 {
-  dl_harq_process::dl_ack_info_result result = harqs.dl_ack_info(uci_slot, ack_value, harq_bit_idx, pucch_snr);
+  if (in_fallback_mode == set_fallback) {
+    return;
+  }
+  in_fallback_mode = set_fallback;
+  logger.debug("ue={} rnti={}: {} fallback mode", ue_index, rnti(), in_fallback_mode ? "Entering" : "Leaving");
+}
 
-  if (result.update == dl_harq_process::status_update::acked or
-      result.update == dl_harq_process::status_update::nacked) {
+std::optional<dl_harq_process::dl_ack_info_result> ue_cell::handle_dl_ack_info(slot_point                 uci_slot,
+                                                                               mac_harq_ack_report_status ack_value,
+                                                                               unsigned                   harq_bit_idx,
+                                                                               std::optional<float>       pucch_snr)
+{
+  std::optional<dl_harq_process::dl_ack_info_result> result =
+      harqs.dl_ack_info(uci_slot, ack_value, harq_bit_idx, pucch_snr);
+
+  if (result.has_value() and (result->update == dl_harq_process::status_update::acked or
+                              result->update == dl_harq_process::status_update::nacked)) {
     // HARQ is not expecting more ACK bits. Consider the feedback in the link adaptation controller.
-    ue_mcs_calculator.handle_dl_ack_info(
-        result.update == dl_harq_process::status_update::acked, result.mcs, result.mcs_table);
+    ue_mcs_calculator.handle_dl_ack_info(result->update == dl_harq_process::status_update::acked,
+                                         result->tb.mcs,
+                                         result->tb.mcs_table,
+                                         result->tb.olla_mcs);
   }
 
   return result;
@@ -96,16 +110,16 @@ grant_prbs_mcs ue_cell::required_dl_prbs(const pdsch_time_domain_resource_alloca
       pdsch_cfg = get_pdsch_config_f1_0_tc_rnti(cell_cfg, pdsch_td_cfg);
       break;
     case dci_dl_rnti_config_type::c_rnti_f1_0:
-      pdsch_cfg = get_pdsch_config_f1_0_c_rnti(cfg(), pdsch_td_cfg);
+      pdsch_cfg = get_pdsch_config_f1_0_c_rnti(cell_cfg, &cfg(), pdsch_td_cfg);
       break;
     case dci_dl_rnti_config_type::c_rnti_f1_1:
       pdsch_cfg = get_pdsch_config_f1_1_c_rnti(cfg(), pdsch_td_cfg, channel_state_manager().get_nof_dl_layers());
       break;
     default:
-      report_fatal_error("Unsupported PDCCH DCI UL format");
+      report_fatal_error("Unsupported PDCCH DCI DL format");
   }
 
-  optional<sch_mcs_index> mcs = ue_mcs_calculator.calculate_dl_mcs(pdsch_cfg.mcs_table);
+  std::optional<sch_mcs_index> mcs = ue_mcs_calculator.calculate_dl_mcs(pdsch_cfg.mcs_table);
   if (not mcs.has_value()) {
     // Return a grant with no PRBs if the MCS is invalid (CQI is either 0, for UE out of range, or > 15).
     return grant_prbs_mcs{.n_prbs = 0};
@@ -153,8 +167,8 @@ grant_prbs_mcs ue_cell::required_ul_prbs(const pusch_time_domain_resource_alloca
       pusch_cfg = get_pusch_config_f0_0_tc_rnti(cell_cfg, pusch_td_cfg);
       break;
     case dci_ul_rnti_config_type::c_rnti_f0_0:
-      pusch_cfg =
-          get_pusch_config_f0_0_c_rnti(*ue_cfg, bwp_ul_cmn, pusch_td_cfg, uci_bits_overallocation, is_csi_report_slot);
+      pusch_cfg = get_pusch_config_f0_0_c_rnti(
+          cell_cfg, ue_cfg, bwp_ul_cmn, pusch_td_cfg, uci_bits_overallocation, is_csi_report_slot);
       break;
     case dci_ul_rnti_config_type::c_rnti_f0_1:
       pusch_cfg = get_pusch_config_f0_1_c_rnti(
@@ -179,6 +193,8 @@ grant_prbs_mcs ue_cell::required_ul_prbs(const pusch_time_domain_resource_alloca
   unsigned nof_prbs = std::min(prbs_tbs.nof_prbs, bwp_ul_cmn.generic_params.crbs.length());
 
   // Apply grant size limits specified in the config.
+  nof_prbs = std::max(std::min(nof_prbs, cell_cfg.expert_cfg.ue.pusch_nof_rbs.stop()),
+                      cell_cfg.expert_cfg.ue.pusch_nof_rbs.start());
   nof_prbs = std::max(std::min(nof_prbs, ue_cfg->rrm_cfg().pusch_grant_size_limits.stop()),
                       ue_cfg->rrm_cfg().pusch_grant_size_limits.start());
 
@@ -189,20 +205,23 @@ int ue_cell::handle_crc_pdu(slot_point pusch_slot, const ul_crc_pdu_indication& 
 {
   // Update UL HARQ state.
   int tbs = harqs.ul_crc_info(crc_pdu.harq_id, crc_pdu.tb_crc_success, pusch_slot);
+
   if (tbs >= 0) {
     // HARQ with matching ID and UCI slot was found.
 
     // Update link adaptation controller.
     const ul_harq_process& h_ul = harqs.ul_harq(crc_pdu.harq_id);
-    ue_mcs_calculator.handle_ul_crc_info(
-        crc_pdu.tb_crc_success, h_ul.last_tx_params().mcs, h_ul.last_tx_params().mcs_table);
+    ue_mcs_calculator.handle_ul_crc_info(crc_pdu.tb_crc_success,
+                                         h_ul.last_tx_params().mcs,
+                                         h_ul.last_tx_params().mcs_table,
+                                         h_ul.last_tx_params().olla_mcs);
 
     // Update PUSCH KO count metrics.
     ue_metrics.consecutive_pusch_kos = (crc_pdu.tb_crc_success) ? 0 : ue_metrics.consecutive_pusch_kos + 1;
 
     // Update PUSCH SNR reported from PHY.
-    if (crc_pdu.ul_sinr_metric.has_value()) {
-      channel_state.update_pusch_snr(crc_pdu.ul_sinr_metric.value());
+    if (crc_pdu.ul_sinr_dB.has_value()) {
+      channel_state.update_pusch_snr(crc_pdu.ul_sinr_dB.value());
     }
   }
 
@@ -211,7 +230,6 @@ int ue_cell::handle_crc_pdu(slot_point pusch_slot, const ul_crc_pdu_indication& 
 
 void ue_cell::handle_csi_report(const csi_report_data& csi_report)
 {
-  set_fallback_state(false);
   apply_link_adaptation_procedures(csi_report);
   if (not channel_state.handle_csi_report(csi_report)) {
     logger.warning("ue={} rnti={}: Invalid CSI report received", ue_index, rnti());
@@ -237,7 +255,7 @@ get_prioritized_search_spaces(const ue_cell& ue_cc, FilterSearchSpace filter, bo
     // NOTE: It does not matter whether we use lhs or rhs SearchSpace to get the aggregation level as we are sorting not
     // filtering. Filtering is already done in previous step.
     const unsigned aggr_lvl_idx = to_aggregation_level_index(
-        ue_cc.get_aggregation_level(ue_cc.channel_state_manager().get_wideband_cqi(), *lhs, is_dl));
+        ue_cc.get_aggregation_level(ue_cc.link_adaptation_controller().get_effective_cqi(), *lhs, is_dl));
     return lhs->cfg->get_nof_candidates()[aggr_lvl_idx] > rhs->cfg->get_nof_candidates()[aggr_lvl_idx];
   };
   std::sort(active_search_spaces.begin(), active_search_spaces.end(), sort_ss);
@@ -246,8 +264,8 @@ get_prioritized_search_spaces(const ue_cell& ue_cc, FilterSearchSpace filter, bo
 }
 
 static_vector<const search_space_info*, MAX_NOF_SEARCH_SPACE_PER_BWP>
-ue_cell::get_active_dl_search_spaces(slot_point                        pdcch_slot,
-                                     optional<dci_dl_rnti_config_type> required_dci_rnti_type) const
+ue_cell::get_active_dl_search_spaces(slot_point                             pdcch_slot,
+                                     std::optional<dci_dl_rnti_config_type> required_dci_rnti_type) const
 {
   static_vector<const search_space_info*, MAX_NOF_SEARCH_SPACE_PER_BWP> active_search_spaces;
 
@@ -259,13 +277,15 @@ ue_cell::get_active_dl_search_spaces(slot_point                        pdcch_slo
   }
 
   // In fallback mode state, only use search spaces configured in CellConfigCommon.
-  if (is_fallback_mode) {
+  if (is_in_fallback_mode()) {
     srsran_assert(not required_dci_rnti_type.has_value() or
                       required_dci_rnti_type == dci_dl_rnti_config_type::c_rnti_f1_0,
                   "Invalid required dci-rnti parameter");
     for (const search_space_configuration& ss :
          ue_cfg->cell_cfg_common.dl_cfg_common.init_dl_bwp.pdcch_common.search_spaces) {
-      active_search_spaces.push_back(&ue_cfg->search_space(ss.get_id()));
+      if (pdcch_helper::is_pdcch_monitoring_active(pdcch_slot, ss)) {
+        active_search_spaces.push_back(&ue_cfg->search_space(ss.get_id()));
+      }
     }
     return active_search_spaces;
   }
@@ -305,7 +325,12 @@ ue_cell::get_active_dl_search_spaces(slot_point                        pdcch_slo
       }
     }
 
-    if (ss.get_pdcch_candidates(get_aggregation_level(channel_state_manager().get_wideband_cqi(), ss, true), pdcch_slot)
+    if (not pdcch_helper::is_pdcch_monitoring_active(pdcch_slot, *ss.cfg)) {
+      return false;
+    }
+
+    if (ss.get_pdcch_candidates(get_aggregation_level(link_adaptation_controller().get_effective_cqi(), ss, true),
+                                pdcch_slot)
             .empty()) {
       return false;
     }
@@ -319,18 +344,20 @@ ue_cell::get_active_dl_search_spaces(slot_point                        pdcch_slo
 }
 
 static_vector<const search_space_info*, MAX_NOF_SEARCH_SPACE_PER_BWP>
-ue_cell::get_active_ul_search_spaces(slot_point                        pdcch_slot,
-                                     optional<dci_ul_rnti_config_type> required_dci_rnti_type) const
+ue_cell::get_active_ul_search_spaces(slot_point                             pdcch_slot,
+                                     std::optional<dci_ul_rnti_config_type> required_dci_rnti_type) const
 {
   // In fallback mode state, only use search spaces configured in CellConfigCommon.
-  if (is_fallback_mode) {
+  if (is_in_fallback_mode()) {
     static_vector<const search_space_info*, MAX_NOF_SEARCH_SPACE_PER_BWP> active_search_spaces;
     srsran_assert(not required_dci_rnti_type.has_value() or
                       required_dci_rnti_type == dci_ul_rnti_config_type::c_rnti_f0_0,
                   "Invalid required dci-rnti parameter");
     for (const search_space_configuration& ss :
          ue_cfg->cell_cfg_common.dl_cfg_common.init_dl_bwp.pdcch_common.search_spaces) {
-      active_search_spaces.push_back(&ue_cfg->search_space(ss.get_id()));
+      if (pdcch_helper::is_pdcch_monitoring_active(pdcch_slot, ss)) {
+        active_search_spaces.push_back(&ue_cfg->search_space(ss.get_id()));
+      }
     }
     return active_search_spaces;
   }
@@ -370,7 +397,11 @@ ue_cell::get_active_ul_search_spaces(slot_point                        pdcch_slo
       }
     }
 
-    if (ss.get_pdcch_candidates(get_aggregation_level(channel_state_manager().get_wideband_cqi(), ss, false),
+    if (not pdcch_helper::is_pdcch_monitoring_active(pdcch_slot, *ss.cfg)) {
+      return false;
+    }
+
+    if (ss.get_pdcch_candidates(get_aggregation_level(link_adaptation_controller().get_effective_cqi(), ss, false),
                                 pdcch_slot)
             .empty()) {
       return false;
@@ -383,8 +414,7 @@ ue_cell::get_active_ul_search_spaces(slot_point                        pdcch_slo
   return get_prioritized_search_spaces(*this, filter_ss, false);
 }
 
-/// \brief Get recommended aggregation level for PDCCH given reported CQI.
-aggregation_level ue_cell::get_aggregation_level(cqi_value cqi, const search_space_info& ss_info, bool is_dl) const
+aggregation_level ue_cell::get_aggregation_level(float cqi, const search_space_info& ss_info, bool is_dl) const
 {
   cqi_table_t cqi_table = cqi_table_t::table1;
   unsigned    dci_size;
@@ -450,4 +480,46 @@ void ue_cell::apply_link_adaptation_procedures(const csi_report_data& csi_report
       h_dl.cancel_harq_retxs(tb_index);
     }
   }
+}
+
+double ue_cell::get_estimated_dl_rate(const pdsch_config_params& pdsch_cfg, sch_mcs_index mcs, unsigned nof_prbs) const
+{
+  static constexpr unsigned NOF_BITS_PER_BYTE = 8U;
+
+  const unsigned      dmrs_prbs   = calculate_nof_dmrs_per_rb(pdsch_cfg.dmrs);
+  sch_mcs_description mcs_info    = pdsch_mcs_get_config(pdsch_cfg.mcs_table, mcs);
+  unsigned            nof_symbols = pdsch_cfg.symbols.length();
+
+  unsigned tbs_bits =
+      tbs_calculator_calculate(tbs_calculator_configuration{.nof_symb_sh      = nof_symbols,
+                                                            .nof_dmrs_prb     = dmrs_prbs,
+                                                            .nof_oh_prb       = pdsch_cfg.nof_oh_prb,
+                                                            .mcs_descr        = mcs_info,
+                                                            .nof_layers       = pdsch_cfg.nof_layers,
+                                                            .tb_scaling_field = pdsch_cfg.tb_scaling_field,
+                                                            .n_prb            = nof_prbs});
+
+  // Return the estimated throughput, considering that the number of bytes is for a slot.
+  return tbs_bits / NOF_BITS_PER_BYTE;
+}
+
+double ue_cell::get_estimated_ul_rate(const pusch_config_params& pusch_cfg, sch_mcs_index mcs, unsigned nof_prbs) const
+{
+  static constexpr unsigned NOF_BITS_PER_BYTE = 8U;
+
+  const unsigned      dmrs_prbs   = calculate_nof_dmrs_per_rb(pusch_cfg.dmrs);
+  sch_mcs_description mcs_info    = pusch_mcs_get_config(pusch_cfg.mcs_table, mcs, pusch_cfg.tp_pi2bpsk_present);
+  unsigned            nof_symbols = pusch_cfg.symbols.length();
+
+  unsigned tbs_bits =
+      tbs_calculator_calculate(tbs_calculator_configuration{.nof_symb_sh      = nof_symbols,
+                                                            .nof_dmrs_prb     = dmrs_prbs,
+                                                            .nof_oh_prb       = pusch_cfg.nof_oh_prb,
+                                                            .mcs_descr        = mcs_info,
+                                                            .nof_layers       = pusch_cfg.nof_layers,
+                                                            .tb_scaling_field = pusch_cfg.tb_scaling_field,
+                                                            .n_prb            = nof_prbs});
+
+  // Return the estimated throughput, considering that the number of bytes is for a slot.
+  return tbs_bits / NOF_BITS_PER_BYTE;
 }

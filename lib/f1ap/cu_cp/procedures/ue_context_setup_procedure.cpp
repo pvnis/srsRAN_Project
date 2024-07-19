@@ -53,12 +53,14 @@ static void fill_f1ap_ue_context_setup_response(f1ap_ue_context_setup_response& 
 
 // ---- UE Context Setup Procedure ----
 
-ue_context_setup_procedure::ue_context_setup_procedure(const f1ap_ue_context_setup_request& request_,
-                                                       f1ap_ue_context_list&                ue_ctxt_list_,
-                                                       f1ap_du_processor_notifier&          du_processor_notifier_,
-                                                       f1ap_message_notifier&               f1ap_notif_,
-                                                       srslog::basic_logger&                logger_,
-                                                       optional<rrc_ue_transfer_context>    rrc_context_) :
+ue_context_setup_procedure::ue_context_setup_procedure(const f1ap_configuration&              f1ap_cfg_,
+                                                       const f1ap_ue_context_setup_request&   request_,
+                                                       f1ap_ue_context_list&                  ue_ctxt_list_,
+                                                       f1ap_du_processor_notifier&            du_processor_notifier_,
+                                                       f1ap_message_notifier&                 f1ap_notif_,
+                                                       srslog::basic_logger&                  logger_,
+                                                       std::optional<rrc_ue_transfer_context> rrc_context_) :
+  f1ap_cfg(f1ap_cfg_),
   request(request_),
   ue_ctxt_list(ue_ctxt_list_),
   du_processor_notifier(du_processor_notifier_),
@@ -81,7 +83,7 @@ void ue_context_setup_procedure::operator()(coro_context<async_task<f1ap_ue_cont
   }
 
   // Subscribe to respective publisher to receive UE CONTEXT SETUP RESPONSE/FAILURE message.
-  transaction_sink.subscribe_to(ue_ctxt->ev_mng.context_setup_outcome);
+  transaction_sink.subscribe_to(ue_ctxt->ev_mng.context_setup_outcome, f1ap_cfg.ue_context_setup_timeout);
 
   // Send command to DU.
   send_ue_context_setup_request();
@@ -104,7 +106,7 @@ bool ue_context_setup_procedure::find_or_create_f1ap_ue_context()
 
   // F1AP UE context does not yet exist.
   // Allocate gNB-CU-UE-F1AP-ID.
-  gnb_cu_ue_f1ap_id_t tmp_cu_ue_f1ap_id = ue_ctxt_list.next_gnb_cu_ue_f1ap_id();
+  gnb_cu_ue_f1ap_id_t tmp_cu_ue_f1ap_id = ue_ctxt_list.allocate_gnb_cu_ue_f1ap_id();
   if (tmp_cu_ue_f1ap_id == gnb_cu_ue_f1ap_id_t::invalid) {
     logger.warning("ue={} proc=\"{}\": No CU UE F1AP ID available", request.ue_index, name());
     return false;
@@ -134,16 +136,16 @@ bool ue_context_setup_procedure::create_ue_rrc_context(const f1ap_ue_context_set
     req.du_to_cu_rrc_container = ue_ctxt_setup_resp.du_to_cu_rrc_info.cell_group_cfg.copy();
     req.prev_context           = std::move(rrc_context);
 
-    ue_rrc_context_creation_response resp = du_processor_notifier.on_ue_rrc_context_creation_request(req);
-    if (resp.f1ap_rrc_notifier == nullptr) {
+    ue_rrc_context_creation_outcome outcome = du_processor_notifier.on_ue_rrc_context_creation_request(req);
+    if (not outcome.has_value()) {
       logger.warning("Couldn't create UE RRC context in target cell");
       return false;
     }
 
     // Add RRC notifier to F1AP UE context.
-    ue_ctxt_list.add_rrc_notifier(req.ue_index, resp.f1ap_rrc_notifier);
+    ue_ctxt_list.add_rrc_notifier(outcome->ue_index, outcome->f1ap_rrc_notifier);
 
-    logger.debug("ue={} Added RRC UE notifier", req.ue_index);
+    logger.debug("ue={} Added RRC UE notifier", outcome->ue_index);
   }
 
   return true;
@@ -159,12 +161,6 @@ void ue_context_setup_procedure::send_ue_context_setup_request()
 
   // Convert common type to asn1
   fill_asn1_ue_context_setup_request(req, request, ue_ctxt->ue_ids);
-
-  if (logger.debug.enabled()) {
-    asn1::json_writer js;
-    f1ap_ue_ctxt_setup_request_msg.pdu.to_json(js);
-    logger.debug("Containerized UeContextSetupRequest: {}", js.to_string());
-  }
 
   // send UE context setup request message
   f1ap_notifier.on_new_message(f1ap_ue_ctxt_setup_request_msg);
@@ -374,7 +370,7 @@ static void fill_asn1_ue_context_setup_request(asn1::f1ap::ue_context_setup_requ
     asn1_request->res_coordination_transfer_info_present                                  = true;
     asn1_request->res_coordination_transfer_info.res_coordination_eutra_cell_info_present = false;
     asn1_request->res_coordination_transfer_info.m_enb_cell_id.from_number(
-        request.res_coordination_transfer_info.value().m_enb_cell_id);
+        request.res_coordination_transfer_info.value().m_enb_cell_id.value());
   }
 
   // serving cell mo
@@ -404,7 +400,7 @@ static void fill_f1ap_ue_context_setup_response(f1ap_ue_context_setup_response& 
   response.ue_index = ue_index;
 
   // cause
-  response.cause = f1ap_asn1_to_cause(asn1_failure->cause);
+  response.cause = asn1_to_cause(asn1_failure->cause);
 
   // potential sp cell list
   if (asn1_failure->potential_sp_cell_list_present) {
@@ -493,7 +489,7 @@ static void fill_f1ap_ue_context_setup_response(f1ap_ue_context_setup_response& 
       // cause
       if (asn1_scell_failed_to_setup_item->scell_failedto_setup_item().cause_present) {
         scell_failed_to_setup_item.cause =
-            f1ap_asn1_to_cause(asn1_scell_failed_to_setup_item->scell_failedto_setup_item().cause);
+            asn1_to_cause(asn1_scell_failed_to_setup_item->scell_failedto_setup_item().cause);
       }
 
       response.scell_failed_to_setup_list.push_back(scell_failed_to_setup_item);

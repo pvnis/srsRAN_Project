@@ -56,14 +56,14 @@ BITRATE_THRESHOLD: float = 0.1
     ),
 )
 @mark.parametrize(
-    "band, common_scs, bandwidth, always_download_artifacts",
+    "band, common_scs, bandwidth",
     (
-        param(3, 15, 50, True, id="band:%s-scs:%s-bandwidth:%s-artifacts:%s"),
-        param(41, 30, 50, False, id="band:%s-scs:%s-bandwidth:%s-artifacts:%s"),
+        param(3, 15, 50, id="band:%s-scs:%s-bandwidth:%s"),
+        param(41, 30, 50, id="band:%s-scs:%s-bandwidth:%s"),
     ),
 )
 @mark.zmq
-@mark.flaky(reruns=3, only_rerun=["failed to start"])
+@mark.flaky(reruns=3, only_rerun=["failed to start", "IPerf Data Invalid"])
 # pylint: disable=too-many-arguments
 def test_zmq(
     retina_manager: RetinaTestManager,
@@ -74,7 +74,6 @@ def test_zmq(
     band: int,
     common_scs: int,
     bandwidth: int,
-    always_download_artifacts: bool,
     protocol: IPerfProto,
     direction: IPerfDir,
 ):
@@ -98,7 +97,7 @@ def test_zmq(
         direction=direction,
         global_timing_advance=0,
         time_alignment_calibration=0,
-        always_download_artifacts=always_download_artifacts,
+        always_download_artifacts=False,
     )
 
 
@@ -176,6 +175,7 @@ def _attach_and_detach_multi_ues(
     always_download_artifacts: bool,
     warning_as_errors: bool = True,
     reattach_count: int = 1,
+    ue_stop_timeout=30,
 ):
     logging.info("Attach / Detach Test")
 
@@ -188,7 +188,6 @@ def _attach_and_detach_multi_ues(
         sample_rate=sample_rate,
         global_timing_advance=global_timing_advance,
         time_alignment_calibration=time_alignment_calibration,
-        pcap=False,
     )
     configure_artifacts(
         retina_data=retina_data,
@@ -221,7 +220,7 @@ def _attach_and_detach_multi_ues(
 
     # Stop and attach half of the UEs while the others are connecting and doing iperf
     for _ in range(reattach_count):
-        ue_stop(ue_array_to_attach, retina_data)
+        ue_stop(ue_array_to_attach, retina_data, ue_stop_timeout=ue_stop_timeout)
         ue_attach_info_dict = ue_start_and_attach(ue_array_to_attach, gnb, fivegc)
     # final stop will be triggered by teardown
 
@@ -229,4 +228,4 @@ def _attach_and_detach_multi_ues(
     for ue_attached_info, task, iperf_request in iperf_array:
         iperf_wait_until_finish(ue_attached_info, fivegc, task, iperf_request, BITRATE_THRESHOLD)
 
-    stop(ue_array, gnb, fivegc, retina_data, warning_as_errors=warning_as_errors)
+    stop(ue_array, gnb, fivegc, retina_data, ue_stop_timeout=ue_stop_timeout, warning_as_errors=warning_as_errors)

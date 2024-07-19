@@ -61,6 +61,9 @@ void ue_configuration_procedure::operator()(coro_context<async_task<f1ap_ue_cont
     CORO_EARLY_RETURN(make_ue_config_failure());
   }
 
+  // > Stop traffic in the DRBs that need to be removed.
+  CORO_AWAIT(stop_drbs_to_rem());
+
   // > Update DU UE bearers.
   update_ue_context();
 
@@ -73,6 +76,12 @@ void ue_configuration_procedure::operator()(coro_context<async_task<f1ap_ue_cont
   proc_logger.log_proc_completed();
 
   CORO_RETURN(mac_res.result ? make_ue_config_response() : make_ue_config_failure());
+}
+
+async_task<void> ue_configuration_procedure::stop_drbs_to_rem()
+{
+  // Request traffic to stop for DRBs that are going to be removed.
+  return ue->handle_drb_traffic_stop_request(request.drbs_to_rem);
 }
 
 void ue_configuration_procedure::update_ue_context()
@@ -158,18 +167,25 @@ void ue_configuration_procedure::update_ue_context()
     auto f1u_cfg_it = du_params.ran.qos.find(drbtoadd.five_qi);
     srsran_assert(f1u_cfg_it != du_params.ran.qos.end(), "Undefined F1-U bearer config for {}", drbtoadd.five_qi);
 
+    // TODO: Adjust QoS characteristics passed while creating a DRB since one DRB can contain multiple QoS flow of
+    //  varying 5QI.
+
     // Create DU DRB instance.
-    std::unique_ptr<du_ue_drb> drb = create_drb(ue->ue_index,
-                                                ue->pcell_index,
-                                                drbtoadd.drb_id,
-                                                it->lcid,
-                                                it->rlc_cfg,
-                                                it->mac_cfg,
-                                                f1u_cfg_it->second.f1u,
-                                                drbtoadd.uluptnl_info_list,
-                                                ue_mng.get_f1u_teid_pool(),
-                                                du_params,
-                                                ue->get_rlc_rlf_notifier());
+    std::unique_ptr<du_ue_drb> drb =
+        create_drb(drb_creation_info{ue->ue_index,
+                                     ue->pcell_index,
+                                     drbtoadd.drb_id,
+                                     it->lcid,
+                                     it->rlc_cfg,
+                                     it->mac_cfg,
+                                     f1u_cfg_it->second.f1u,
+                                     drbtoadd.uluptnl_info_list,
+                                     ue_mng.get_f1u_teid_pool(),
+                                     du_params,
+                                     ue->get_rlc_rlf_notifier(),
+                                     get_5qi_to_qos_characteristics_mapping(drbtoadd.five_qi),
+                                     drbtoadd.gbr_flow_info,
+                                     drbtoadd.s_nssai});
     if (drb == nullptr) {
       proc_logger.log_proc_warning("Failed to create {}. Cause: Failed to allocate DU UE resources.", drbtoadd.drb_id);
       continue;
@@ -180,7 +196,15 @@ void ue_configuration_procedure::update_ue_context()
 
 void ue_configuration_procedure::clear_old_ue_context()
 {
-  drbs_to_rem.clear();
+  if (not drbs_to_rem.empty()) {
+    // Dispatch DRB context destruction to the respective UE executor.
+    task_executor& exec = du_params.services.ue_execs.ctrl_executor(ue->ue_index);
+    if (not exec.defer([drbs = std::move(drbs_to_rem)]() mutable { drbs.clear(); })) {
+      logger.warning("ue={}: Could not dispatch DRB removal task to UE executor. Destroying it the main DU manager "
+                     "execution context",
+                     ue->ue_index);
+    }
+  }
 }
 
 async_task<mac_ue_reconfiguration_response> ue_configuration_procedure::update_mac_mux_and_demux()
@@ -301,6 +325,16 @@ f1ap_ue_context_update_response ue_configuration_procedure::make_ue_config_respo
       b.mac_lc_ch_cfg_present   = false;
       b.reestablish_rlc_present = true;
     }
+
+    // TODO: Set non-hardcoded servingCellMo.
+    asn1_cell_group.sp_cell_cfg.sp_cell_cfg_ded.serving_cell_mo_present = true;
+    asn1_cell_group.sp_cell_cfg.sp_cell_cfg_ded.serving_cell_mo         = 1;
+
+    // Fill fields with -- Cond SyncAndCellAdd
+    asn1_cell_group.sp_cell_cfg.sp_cell_cfg_ded.first_active_dl_bwp_id_present        = true;
+    asn1_cell_group.sp_cell_cfg.sp_cell_cfg_ded.first_active_dl_bwp_id                = 0;
+    asn1_cell_group.sp_cell_cfg.sp_cell_cfg_ded.ul_cfg.first_active_ul_bwp_id_present = true;
+    asn1_cell_group.sp_cell_cfg.sp_cell_cfg_ded.ul_cfg.first_active_ul_bwp_id         = 0;
   }
 
   // Pack cellGroupConfig.

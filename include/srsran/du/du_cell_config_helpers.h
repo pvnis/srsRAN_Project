@@ -27,7 +27,6 @@
 #include "srsran/mac/config/mac_config_helpers.h"
 #include "srsran/ran/band_helper.h"
 #include "srsran/ran/five_qi.h"
-#include "srsran/ran/nr_cgi_helpers.h"
 #include "srsran/ran/pdcch/pdcch_type0_css_coreset_config.h"
 #include "srsran/ran/tdd/tdd_ul_dl_config.h"
 #include "srsran/scheduler/config/cell_config_builder_params.h"
@@ -84,10 +83,10 @@ inline scheduler_expert_config make_default_scheduler_expert_config()
 inline du_cell_config make_default_du_cell_config(const cell_config_builder_params_extended& params = {})
 {
   du_cell_config cfg{};
-  cfg.pci         = params.pci;
-  cfg.tac         = 1;
-  cfg.nr_cgi.plmn = "00101";
-  cfg.nr_cgi.nci  = config_helpers::make_nr_cell_identity(411, 32, 1);
+  cfg.pci            = params.pci;
+  cfg.tac            = 1;
+  cfg.nr_cgi.plmn_id = plmn_identity::test_value();
+  cfg.nr_cgi.nci     = nr_cell_identity::create({411, 22}, 1).value();
 
   cfg.dl_carrier              = make_default_dl_carrier_configuration(params);
   cfg.ul_carrier              = make_default_ul_carrier_configuration(params);
@@ -132,9 +131,71 @@ inline du_cell_config make_default_du_cell_config(const cell_config_builder_para
 ///               PDCP SDUs have been transmitted (RLC UM/AM) or delivered (RLC AM). Small values increase the number of
 ///               F1-U messages. Large values may trigger unnecessary discard notifications due to expiration of the
 ///               PDCP discard timer.
-inline std::map<five_qi_t, du_qos_config> make_default_du_qos_config_list(int rlc_metrics_report)
+inline std::map<five_qi_t, du_qos_config> make_default_du_qos_config_list(bool warn_on_drop, int rlc_metrics_report)
 {
   std::map<five_qi_t, du_qos_config> qos_list = {};
+  {
+    // 5QI=1
+    du_qos_config cfg{};
+    // RLC
+    cfg.rlc.mode                  = rlc_mode::um_bidir;
+    cfg.rlc.um.tx.sn_field_length = rlc_um_sn_size::size12bits;
+    cfg.rlc.um.rx.sn_field_length = rlc_um_sn_size::size12bits;
+    cfg.rlc.um.rx.t_reassembly    = 50;
+    cfg.rlc.um.tx.queue_size      = 4096;
+    cfg.rlc.metrics_period        = std::chrono::milliseconds(rlc_metrics_report);
+    // F1-U
+    cfg.f1u.t_notify = 10;
+    // MAC
+    cfg.mac          = make_default_drb_mac_lc_config();
+    cfg.mac.priority = 4;
+    cfg.mac.lcg_id   = uint_to_lcg_id(1);
+
+    qos_list[uint_to_five_qi(1)] = cfg;
+  }
+  {
+    // 5QI=2
+    du_qos_config cfg{};
+    // RLC
+    cfg.rlc.mode                  = rlc_mode::um_bidir;
+    cfg.rlc.um.tx.sn_field_length = rlc_um_sn_size::size12bits;
+    cfg.rlc.um.rx.sn_field_length = rlc_um_sn_size::size12bits;
+    cfg.rlc.um.rx.t_reassembly    = 50;
+    cfg.rlc.um.tx.queue_size      = 4096;
+    cfg.rlc.metrics_period        = std::chrono::milliseconds(rlc_metrics_report);
+    // F1-U
+    cfg.f1u.t_notify = 10;
+    // MAC
+    cfg.mac          = make_default_drb_mac_lc_config();
+    cfg.mac.priority = 4;
+    cfg.mac.lcg_id   = uint_to_lcg_id(1);
+
+    qos_list[uint_to_five_qi(2)] = cfg;
+  }
+  {
+    // 5QI=5
+    du_qos_config cfg{};
+    // RLC
+    cfg.rlc.mode                    = rlc_mode::am;
+    cfg.rlc.am.tx.sn_field_length   = rlc_am_sn_size::size12bits;
+    cfg.rlc.am.tx.t_poll_retx       = 80;
+    cfg.rlc.am.tx.poll_pdu          = 64;
+    cfg.rlc.am.tx.poll_byte         = 125;
+    cfg.rlc.am.tx.max_retx_thresh   = 4;
+    cfg.rlc.am.tx.max_window        = 0;
+    cfg.rlc.am.tx.queue_size        = 4096;
+    cfg.rlc.am.rx.sn_field_length   = rlc_am_sn_size::size12bits;
+    cfg.rlc.am.rx.t_reassembly      = 80;
+    cfg.rlc.am.rx.t_status_prohibit = 10;
+    cfg.rlc.am.rx.max_sn_per_status = {};
+    cfg.rlc.metrics_period          = std::chrono::milliseconds(rlc_metrics_report);
+    // F1-U
+    cfg.f1u.t_notify = 10;
+    // MAC
+    cfg.mac = make_default_drb_mac_lc_config();
+
+    qos_list[uint_to_five_qi(5)] = cfg;
+  }
   {
     // 5QI=7
     du_qos_config cfg{};
@@ -146,7 +207,8 @@ inline std::map<five_qi_t, du_qos_config> make_default_du_qos_config_list(int rl
     cfg.rlc.um.tx.queue_size      = 4096;
     cfg.rlc.metrics_period        = std::chrono::milliseconds(rlc_metrics_report);
     // F1-U
-    cfg.f1u.t_notify = 10;
+    cfg.f1u.t_notify     = 10;
+    cfg.f1u.warn_on_drop = warn_on_drop;
     // MAC
     cfg.mac          = make_default_drb_mac_lc_config();
     cfg.mac.priority = 4;
@@ -172,7 +234,8 @@ inline std::map<five_qi_t, du_qos_config> make_default_du_qos_config_list(int rl
     cfg.rlc.am.rx.max_sn_per_status = {};
     cfg.rlc.metrics_period          = std::chrono::milliseconds(rlc_metrics_report);
     // F1-U
-    cfg.f1u.t_notify = 10;
+    cfg.f1u.t_notify     = 10;
+    cfg.f1u.warn_on_drop = warn_on_drop;
     // MAC
     cfg.mac = make_default_drb_mac_lc_config();
 

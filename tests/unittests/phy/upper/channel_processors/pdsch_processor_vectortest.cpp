@@ -86,12 +86,12 @@ private:
   static std::shared_ptr<hal::hw_accelerator_pdsch_enc_factory> create_hw_accelerator_pdsch_enc_factory()
   {
 #ifdef HWACC_PDSCH_ENABLED
-    // Hardcoded stdout and error logging.
+    //  Hardcoded stdout and error logging.
     srslog::sink* log_sink = srslog::create_stdout_sink();
     srslog::set_default_sink(*log_sink);
     srslog::init();
     srslog::basic_logger& logger = srslog::fetch_basic_logger("HAL", false);
-    logger.set_level(srslog::str_to_basic_level("error"));
+    logger.set_level(srslog::basic_levels::error);
 
     // Pointer to a dpdk-based hardware-accelerator interface.
     static std::unique_ptr<dpdk::dpdk_eal> dpdk_interface = nullptr;
@@ -120,9 +120,12 @@ private:
     }
 
     // Set the hardware-accelerator configuration.
-    hw_accelerator_pdsch_enc_configuration hw_encoder_config;
+    hal::hw_accelerator_pdsch_enc_configuration hw_encoder_config;
     hw_encoder_config.acc_type          = "acc100";
     hw_encoder_config.bbdev_accelerator = bbdev_accelerator;
+    hw_encoder_config.cb_mode           = false;
+    hw_encoder_config.max_tb_size       = RTE_BBDEV_LDPC_E_MAX_MBUF;
+    hw_encoder_config.dedicated_queue   = true;
 
     // ACC100 hardware-accelerator implementation.
     return hal::create_hw_accelerator_pdsch_enc_factory(hw_encoder_config);
@@ -148,10 +151,6 @@ private:
 
     // Set the hardware-accelerated PDSCH encoder configuration.
     pdsch_encoder_factory_hw_configuration encoder_hw_factory_config;
-#ifdef HWACC_PDSCH_ENABLED
-    encoder_hw_factory_config.cb_mode     = false;
-    encoder_hw_factory_config.max_tb_size = RTE_BBDEV_LDPC_E_MAX_MBUF;
-#endif // HWACC_PDSCH_ENABLED
     encoder_hw_factory_config.crc_factory        = crc_calculator_factory;
     encoder_hw_factory_config.segmenter_factory  = segmenter_factory;
     encoder_hw_factory_config.hw_encoder_factory = hw_encoder_factory;
@@ -231,13 +230,13 @@ private:
       return nullptr;
     }
 
-    if (factory_type == "generic") {
+    if (factory_type.find("generic") != std::string::npos) {
       return create_pdsch_processor_factory_sw(pdsch_encoder_factory, pdsch_modulator_factory, dmrs_pdsch_factory);
     }
 
     if (factory_type == "concurrent") {
       worker_pool = std::make_unique<task_worker_pool<concurrent_queue_policy::locking_mpmc>>(
-          NOF_CONCURRENT_THREADS, 128, "pdsch_proc");
+          "pdsch_proc", NOF_CONCURRENT_THREADS, 128);
       executor = std::make_unique<task_worker_pool_executor<concurrent_queue_policy::locking_mpmc>>(*worker_pool);
 
       return create_pdsch_concurrent_processor_factory_sw(crc_calc_factory,
@@ -335,8 +334,10 @@ TEST_P(PdschProcessorFixture, PdschProcessorVectortest)
   // Waits for the processor to finish.
   notifier_spy.wait_for_finished();
 
+  // Tolerance: max BF16 error times sqrt(2), since we are taking the modulus.
+  constexpr float tolerance = M_SQRT2f32 / 256.0;
   // Assert results.
-  grid.assert_entries(test_case.grid_expected.read());
+  grid.assert_entries(test_case.grid_expected.read(), tolerance);
 }
 
 // Creates test suite that combines all possible parameters.

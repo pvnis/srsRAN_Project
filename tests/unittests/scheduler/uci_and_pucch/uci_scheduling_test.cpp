@@ -41,22 +41,22 @@ public:
                               .period           = sr_period,
                               .offset           = sr_offset}}
   {
-    csi_offset = variant_get<csi_report_config::periodic_or_semi_persistent_report_on_pucch>(t_bench.get_main_ue()
-                                                                                                 .get_pcell()
-                                                                                                 .cfg()
-                                                                                                 .cfg_dedicated()
-                                                                                                 .csi_meas_cfg.value()
-                                                                                                 .csi_report_cfg_list[0]
-                                                                                                 .report_cfg_type)
+    csi_offset = std::get<csi_report_config::periodic_or_semi_persistent_report_on_pucch>(t_bench.get_main_ue()
+                                                                                              .get_pcell()
+                                                                                              .cfg()
+                                                                                              .cfg_dedicated()
+                                                                                              .csi_meas_cfg.value()
+                                                                                              .csi_report_cfg_list[0]
+                                                                                              .report_cfg_type)
                      .report_slot_offset;
 
-    csi_period = variant_get<csi_report_config::periodic_or_semi_persistent_report_on_pucch>(t_bench.get_main_ue()
-                                                                                                 .get_pcell()
-                                                                                                 .cfg()
-                                                                                                 .cfg_dedicated()
-                                                                                                 .csi_meas_cfg.value()
-                                                                                                 .csi_report_cfg_list[0]
-                                                                                                 .report_cfg_type)
+    csi_period = std::get<csi_report_config::periodic_or_semi_persistent_report_on_pucch>(t_bench.get_main_ue()
+                                                                                              .get_pcell()
+                                                                                              .cfg()
+                                                                                              .cfg_dedicated()
+                                                                                              .csi_meas_cfg.value()
+                                                                                              .csi_report_cfg_list[0]
+                                                                                              .report_cfg_type)
                      .report_slot_period;
 
     // In the slots with SR only, the expected format is Format 1.
@@ -118,7 +118,7 @@ TEST_P(uci_sr_scheduler_tester, test_different_periods)
   // Randomize initial slot, as the UCI scheduler will be called only after the UE is added.
   const unsigned starting_slot = test_rgen::uniform_int<unsigned>(0, 1000U);
   for (unsigned sl_cnt = starting_slot; sl_cnt < starting_slot + NOF_SLOTS_TO_TEST; ++sl_cnt) {
-    t_bench.uci_sched.run_slot(t_bench.res_grid, t_bench.sl_tx);
+    t_bench.uci_sched.run_slot(t_bench.res_grid);
     if ((t_bench.sl_tx - sr_offset).to_uint() % sr_periodicity_to_slot(sr_period) == 0) {
       ASSERT_EQ(1, t_bench.res_grid[0].result.ul.pucchs.size());
       // The scheduler allocates:
@@ -231,7 +231,7 @@ TEST_P(uci_csi_scheduler_tester, test_different_periods)
   // Randomize initial slot, as the UCI scheduler will be called only after the UE is added.
   const unsigned starting_slot = test_rgen::uniform_int<unsigned>(0, 1000U);
   for (unsigned sl_cnt = starting_slot; sl_cnt < starting_slot + NOF_SLOTS_TO_TEST; ++sl_cnt) {
-    t_bench.uci_sched.run_slot(t_bench.res_grid, t_bench.sl_tx);
+    t_bench.uci_sched.run_slot(t_bench.res_grid);
     if ((t_bench.sl_tx - csi_offset).to_uint() % csi_report_periodicity_to_uint(csi_period) == 0) {
       ASSERT_EQ(1, t_bench.res_grid[0].result.ul.pucchs.size());
       // The scheduler allocates:

@@ -21,14 +21,14 @@
  */
 
 #include "mac_dl_processor.h"
-#include "srsran/support/async/execute_on.h"
+#include "srsran/support/async/async_no_op_task.h"
 
 using namespace srsran;
 
 mac_dl_processor::mac_dl_processor(const mac_dl_config&             mac_cfg,
                                    mac_scheduler_cell_info_handler& sched_,
                                    du_rnti_table&                   rnti_table_) :
-  cfg(mac_cfg), ue_mng(rnti_table_), sched(sched_)
+  cfg(mac_cfg), rnti_table(rnti_table_), sched(sched_)
 {
 }
 
@@ -45,11 +45,10 @@ void mac_dl_processor::add_cell(const mac_cell_creation_request& cell_cfg_req)
   cells[cell_cfg_req.cell_index] =
       std::make_unique<mac_cell_processor>(cell_cfg_req,
                                            sched,
-                                           ue_mng,
+                                           rnti_table,
                                            cfg.phy_notifier.get_cell(cell_cfg_req.cell_index),
                                            cfg.cell_exec_mapper.executor(cell_cfg_req.cell_index),
                                            cfg.cell_exec_mapper.slot_ind_executor(cell_cfg_req.cell_index),
-                                           cfg.cell_exec_mapper.error_ind_executor(cell_cfg_req.cell_index),
                                            cfg.ctrl_exec,
                                            cfg.pcap);
 }
@@ -64,60 +63,35 @@ void mac_dl_processor::remove_cell(du_cell_index_t cell_index)
 
 async_task<bool> mac_dl_processor::add_ue(const mac_ue_create_request& request)
 {
-  // > Allocate UE DL HARQ buffers.
-  // Note: This is a large allocation, and therefore, should be done outside of the cell thread to avoid causing lates.
-  mac_dl_ue_context ue_inst(request);
-
-  return launch_async([this, request, ue_inst = std::move(ue_inst)](coro_context<async_task<bool>>& ctx) mutable {
-    CORO_BEGIN(ctx);
-
-    // > Change to respective DL executor
-    CORO_AWAIT(execute_on(cfg.cell_exec_mapper.executor(request.cell_index)));
-
-    // > Insert UE and DL bearers
-    ue_mng.add_ue(std::move(ue_inst));
-
-    // > Change back to CTRL executor before returning
-    CORO_AWAIT(execute_on(cfg.ctrl_exec));
-
-    CORO_RETURN(true);
-  });
+  if (not has_cell(request.cell_index)) {
+    return launch_no_op_task<bool>(false);
+  }
+  return cells[request.cell_index]->add_ue(request);
 }
 
 async_task<void> mac_dl_processor::remove_ue(const mac_ue_delete_request& request)
 {
-  return launch_async([this, request](coro_context<async_task<void>>& ctx) {
-    CORO_BEGIN(ctx);
-
-    // 1. Change to respective DL executor
-    CORO_AWAIT(execute_on(cfg.cell_exec_mapper.executor(request.cell_index)));
-
-    // 2. Remove UE associated DL channels
-    ue_mng.remove_ue(request.ue_index);
-
-    // 3. Change back to CTRL executor before returning
-    CORO_AWAIT(execute_on(cfg.ctrl_exec));
-
-    CORO_RETURN();
-  });
+  if (not has_cell(request.cell_index)) {
+    return launch_no_op_task();
+  }
+  return cells[request.cell_index]->remove_ue(request);
 }
 
 async_task<bool> mac_dl_processor::addmod_bearers(du_ue_index_t                                  ue_index,
                                                   du_cell_index_t                                pcell_index,
                                                   const std::vector<mac_logical_channel_config>& logical_channels)
 {
-  return dispatch_and_resume_on(
-      cfg.cell_exec_mapper.executor(pcell_index), cfg.ctrl_exec, [this, ue_index, logical_channels]() {
-        return ue_mng.addmod_bearers(ue_index, logical_channels);
-      });
+  if (not has_cell(pcell_index)) {
+    return launch_no_op_task<bool>(false);
+  }
+  return cells[pcell_index]->addmod_bearers(ue_index, logical_channels);
 }
 
 async_task<bool>
 mac_dl_processor::remove_bearers(du_ue_index_t ue_index, du_cell_index_t pcell_index, span<const lcid_t> lcids_to_rem)
 {
-  std::vector<lcid_t> lcids(lcids_to_rem.begin(), lcids_to_rem.end());
-  return dispatch_and_resume_on(
-      cfg.cell_exec_mapper.executor(pcell_index), cfg.ctrl_exec, [this, ue_index, lcids = std::move(lcids)]() {
-        return ue_mng.remove_bearers(ue_index, lcids);
-      });
+  if (not has_cell(pcell_index)) {
+    return launch_no_op_task<bool>(false);
+  }
+  return cells[pcell_index]->remove_bearers(ue_index, lcids_to_rem);
 }

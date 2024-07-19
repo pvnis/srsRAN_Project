@@ -27,8 +27,8 @@
 #include "srsran/adt/byte_buffer.h"
 #include "srsran/adt/expected.h"
 #include "srsran/asn1/e2ap/e2ap.h"
-#include "srsran/asn1/e2ap/e2sm_kpm.h"
-#include "srsran/asn1/e2ap/e2sm_rc.h"
+#include "srsran/asn1/e2sm/e2sm_common_ies.h"
+#include "srsran/asn1/e2sm/e2sm_kpm_ies.h"
 #include "srsran/ran/lcid.h"
 #include "srsran/rlc/rlc_metrics.h"
 #include "srsran/scheduler/scheduler_metrics.h"
@@ -84,13 +84,13 @@ public:
   virtual async_task<e2_setup_response_message> start_initial_e2_setup_routine() = 0;
 };
 
-class e2_du_metrics_notifier : public scheduler_ue_metrics_notifier, public rlc_metrics_notifier
+class e2_du_metrics_notifier : public scheduler_metrics_notifier, public rlc_metrics_notifier
 {
 public:
   virtual ~e2_du_metrics_notifier() = default;
 
   using rlc_metrics_notifier::report_metrics;
-  using scheduler_ue_metrics_notifier::report_metrics;
+  using scheduler_metrics_notifier::report_metrics;
 };
 
 class e2_du_metrics_interface

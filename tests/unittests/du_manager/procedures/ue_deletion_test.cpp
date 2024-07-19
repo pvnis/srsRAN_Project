@@ -44,15 +44,13 @@ protected:
 
   void start_procedure()
   {
-    f1ap_ue_delete_request msg;
-    msg.ue_index = test_ue->ue_index;
-    proc         = launch_async<ue_deletion_procedure>(msg, ue_mng, params);
+    proc = launch_async<ue_deletion_procedure>(test_ue->ue_index, ue_mng, params);
     proc_launcher.emplace(proc);
   }
 
-  du_ue*                             test_ue = nullptr;
-  async_task<void>                   proc;
-  optional<lazy_task_launcher<void>> proc_launcher;
+  du_ue*                                  test_ue = nullptr;
+  async_task<void>                        proc;
+  std::optional<lazy_task_launcher<void>> proc_launcher;
 };
 
 TEST_F(ue_deletion_tester, when_du_manager_receives_ue_delete_request_then_f1ap_and_mac_get_request_to_delete_ue)

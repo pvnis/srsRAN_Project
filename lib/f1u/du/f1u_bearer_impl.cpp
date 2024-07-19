@@ -31,17 +31,20 @@ f1u_bearer_impl::f1u_bearer_impl(uint32_t                       ue_index,
                                  const f1u_config&              config,
                                  f1u_rx_sdu_notifier&           rx_sdu_notifier_,
                                  f1u_tx_pdu_notifier&           tx_pdu_notifier_,
-                                 timer_factory                  timers) :
+                                 timer_factory                  timers,
+                                 task_executor&                 ue_executor_) :
   logger("DU-F1-U", {ue_index, drb_id_, dl_tnl_info_}),
   cfg(config),
+  dl_tnl_info(dl_tnl_info_),
   rx_sdu_notifier(rx_sdu_notifier_),
   tx_pdu_notifier(tx_pdu_notifier_),
+  ue_executor(ue_executor_),
   ul_notif_timer(timers.create_timer())
 {
   ul_notif_timer.set(std::chrono::milliseconds(cfg.t_notify), [this](timer_id_t tid) { on_expired_ul_notif_timer(); });
   ul_notif_timer.run();
 
-  logger.log_info("F1-U bearer configured. {}", cfg);
+  logger.log_info("F1-U bearer configured. {} {}", cfg, dl_tnl_info);
 }
 
 void f1u_bearer_impl::handle_sdu(byte_buffer_chain sdu)
@@ -60,14 +63,31 @@ void f1u_bearer_impl::handle_sdu(byte_buffer_chain sdu)
 
 void f1u_bearer_impl::handle_pdu(nru_dl_message msg)
 {
+  auto fn = [this, m = std::move(msg)]() mutable { handle_pdu_impl(std::move(m)); };
+  if (!ue_executor.execute(std::move(fn))) {
+    if (!cfg.warn_on_drop) {
+      logger.log_info("Dropped F1-U PDU, queue is full");
+    } else {
+      logger.log_warning("Dropped F1-U PDU, queue is full");
+    }
+  }
+}
+
+void f1u_bearer_impl::stop()
+{
+  if (not stopped) {
+    ul_notif_timer.stop();
+  }
+  stopped = true;
+}
+
+void f1u_bearer_impl::handle_pdu_impl(nru_dl_message msg)
+{
   logger.log_debug("F1-U bearer received PDU");
   // handle T-PDU
   if (!msg.t_pdu.empty()) {
-    logger.log_debug("Delivering T-PDU of size={}, pdcp_sn={}", msg.t_pdu.length(), msg.pdcp_sn);
-    pdcp_tx_pdu tx_sdu = {};
-    tx_sdu.buf         = std::move(msg.t_pdu);
-    tx_sdu.pdcp_sn     = msg.pdcp_sn;
-    rx_sdu_notifier.on_new_sdu(tx_sdu);
+    logger.log_debug("Delivering T-PDU. size={}", msg.t_pdu.length());
+    rx_sdu_notifier.on_new_sdu(std::move(msg.t_pdu), msg.dl_user_data.retransmission_flag);
   }
   // handle discard notifications
   if (msg.dl_user_data.discard_blocks.has_value()) {
@@ -98,6 +118,20 @@ void f1u_bearer_impl::handle_delivery_notification(uint32_t highest_pdcp_sn)
   highest_delivered_pdcp_sn.store(highest_pdcp_sn, std::memory_order_relaxed);
 }
 
+void f1u_bearer_impl::handle_retransmit_notification(uint32_t highest_pdcp_sn)
+{
+  // This function may be called from pcell_executor, since it only writes to an atomic variable
+  logger.log_debug("Storing highest retransmitted pdcp_sn={}", highest_pdcp_sn);
+  highest_retransmitted_pdcp_sn.store(highest_pdcp_sn, std::memory_order_relaxed);
+}
+
+void f1u_bearer_impl::handle_delivery_retransmitted_notification(uint32_t highest_pdcp_sn)
+{
+  // This function may be called from pcell_executor, since it only writes to an atomic variable
+  logger.log_debug("Storing highest successfully delivered retransmitted pdcp_sn={}", highest_pdcp_sn);
+  highest_delivered_retransmitted_pdcp_sn.store(highest_pdcp_sn, std::memory_order_relaxed);
+}
+
 bool f1u_bearer_impl::fill_highest_transmitted_pdcp_sn(nru_dl_data_delivery_status& status)
 {
   uint32_t cur_highest_transmitted_pdcp_sn = highest_transmitted_pdcp_sn.load(std::memory_order_relaxed);
@@ -122,6 +156,31 @@ bool f1u_bearer_impl::fill_highest_delivered_pdcp_sn(nru_dl_data_delivery_status
   return false;
 }
 
+bool f1u_bearer_impl::fill_highest_retransmitted_pdcp_sn(nru_dl_data_delivery_status& status)
+{
+  uint32_t cur_highest_retransmitted_pdcp_sn = highest_retransmitted_pdcp_sn.load(std::memory_order_relaxed);
+  if (cur_highest_retransmitted_pdcp_sn != notif_highest_retransmitted_pdcp_sn) {
+    logger.log_debug("Adding highest retransmitted pdcp_sn={}", cur_highest_retransmitted_pdcp_sn);
+    notif_highest_retransmitted_pdcp_sn  = cur_highest_retransmitted_pdcp_sn;
+    status.highest_retransmitted_pdcp_sn = cur_highest_retransmitted_pdcp_sn;
+    return true;
+  }
+  return false;
+}
+
+bool f1u_bearer_impl::fill_highest_delivered_retransmitted_pdcp_sn(nru_dl_data_delivery_status& status)
+{
+  uint32_t cur_highest_delivered_retransmitted_pdcp_sn =
+      highest_delivered_retransmitted_pdcp_sn.load(std::memory_order_relaxed);
+  if (cur_highest_delivered_retransmitted_pdcp_sn != notif_highest_delivered_retransmitted_pdcp_sn) {
+    logger.log_debug("Adding highest delivered retransmitted pdcp_sn={}", cur_highest_delivered_retransmitted_pdcp_sn);
+    notif_highest_delivered_retransmitted_pdcp_sn  = cur_highest_delivered_retransmitted_pdcp_sn;
+    status.highest_delivered_retransmitted_pdcp_sn = cur_highest_delivered_retransmitted_pdcp_sn;
+    return true;
+  }
+  return false;
+}
+
 void f1u_bearer_impl::fill_data_delivery_status(nru_ul_message& msg)
 {
   nru_dl_data_delivery_status status         = {};
@@ -129,6 +188,8 @@ void f1u_bearer_impl::fill_data_delivery_status(nru_ul_message& msg)
 
   status_changed |= fill_highest_transmitted_pdcp_sn(status);
   status_changed |= fill_highest_delivered_pdcp_sn(status);
+  status_changed |= fill_highest_retransmitted_pdcp_sn(status);
+  status_changed |= fill_highest_delivered_retransmitted_pdcp_sn(status);
 
   if (status_changed) {
     logger.log_debug("Adding data delivery status to NR-U message");

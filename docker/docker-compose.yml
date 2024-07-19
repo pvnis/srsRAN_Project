@@ -18,8 +18,6 @@
 # and at http://www.gnu.org/licenses/.
 #
 
-version: '3.9'
-
 services:
   5gc:
     container_name: open5gs_5gc
@@ -28,14 +26,15 @@ services:
       target: open5gs
       args:
         OS_VERSION: "22.04"
-        OPEN5GS_VERSION: "v2.6.1"
+        OPEN5GS_VERSION: "v2.7.0"
     env_file:
       - ${OPEN_5GS_ENV_FILE:-open5gs/open5gs.env}
     privileged: true
     ports:
-      - "3000:3000/tcp"
+      - "9999:9999/tcp"
     # Uncomment port to use the 5gc from outside the docker network
-    #   - "38412:38412/sctp"
+    #  - "38412:38412/sctp"
+    #  - "2152:2152/udp"
     command: 5gc -c open5gs-5gc.yml
     healthcheck:
       test: [ "CMD-SHELL", "nc -z 127.0.0.20 7777" ]
@@ -54,7 +53,7 @@ services:
       context: ..
       dockerfile: docker/Dockerfile
       args:
-        OS_VERSION: 22.04
+        OS_VERSION: "24.04"
     # privileged mode is requred only for accessing usb devices
     privileged: true
     # Extra capabilities always required
@@ -123,11 +122,11 @@ services:
 
   grafana:
     container_name: grafana
-    image: grafana/grafana-oss:${GRAFANA_VERSION}
+    image: srsran/grafana
+    build:
+      context: grafana
     volumes:
       - grafana-storage:/var/lib/grafana:rw
-      - ./grafana/provisioning:/etc/grafana/provisioning
-      - ./grafana/dashboards:/etc/dashboards
     env_file:
       - .env
     depends_on:

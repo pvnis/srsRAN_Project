@@ -25,6 +25,7 @@
 #include "srsran/ofh/serdes/ofh_cplane_message_builder.h"
 #include "srsran/ofh/serdes/ofh_uplane_message_builder.h"
 #include "srsran/ofh/serdes/ofh_uplane_message_decoder.h"
+#include "srsran/srslog/logger.h"
 #include <memory>
 
 namespace srsran {
@@ -54,8 +55,7 @@ create_static_compr_method_ofh_user_plane_packet_decoder(srslog::basic_logger&  
                                                          cyclic_prefix                    cp,
                                                          unsigned                         ru_nof_prbs,
                                                          std::unique_ptr<iq_decompressor> decompressor,
-                                                         const ru_compression_params&     compr_params,
-                                                         const ru_compression_params&     prach_compr_params);
+                                                         const ru_compression_params&     compr_params);
 
 /// Creates an Open Fronthaul User-Plane packet decoder which supports dynamic compression method.
 std::unique_ptr<uplane_message_decoder>

@@ -25,7 +25,6 @@
 #include "gtpu_pdu.h"
 #include "gtpu_tunnel_base_tx.h"
 #include "srsran/gtpu/gtpu_echo_tx.h"
-#include "srsran/gtpu/gtpu_tunnel_tx.h"
 #include <arpa/inet.h>
 #include <cstdint>
 #include <netinet/in.h>
@@ -36,7 +35,7 @@ namespace srsran {
 class gtpu_echo_tx : public gtpu_tunnel_base_tx, public gtpu_echo_tx_interface
 {
 public:
-  gtpu_echo_tx(dlt_pcap& gtpu_pcap_, gtpu_tunnel_tx_upper_layer_notifier& upper_dn_) :
+  gtpu_echo_tx(dlt_pcap& gtpu_pcap_, gtpu_tunnel_common_tx_upper_layer_notifier& upper_dn_) :
     gtpu_tunnel_base_tx(gtpu_tunnel_log_prefix{{}, GTPU_PATH_MANAGEMENT_TEID, "UL"}, gtpu_pcap_, upper_dn_)
   {
   }
@@ -76,7 +75,12 @@ public:
 
     // Add information element for "recovery" for backward compatibility. See TS 29.281 Sec. 8.2
     gtpu_ie_recovery ie_recovery = {};
-    gtpu_write_ie_recovery(buf, ie_recovery, logger);
+
+    bool write_ok = gtpu_write_ie_recovery(buf, ie_recovery, logger);
+    if (!write_ok) {
+      logger.log_error("Dropped SDU, error writing IE recovery to echo response. sn={}", sn);
+      return;
+    }
 
     // TODO: Add optional IE for "private extension"
 
@@ -91,7 +95,7 @@ public:
     hdr.teid                = GTPU_PATH_MANAGEMENT_TEID;
     hdr.seq_number          = sn; // responses copy the SN of the request, TS 29.281 Sec. 4.3.1
 
-    bool write_ok = gtpu_write_header(buf, hdr, logger);
+    write_ok = gtpu_write_header(buf, hdr, logger);
 
     if (!write_ok) {
       logger.log_error("Discarded SDU. Cause: Error writing GTP-U header of echo response. sn={}", sn);

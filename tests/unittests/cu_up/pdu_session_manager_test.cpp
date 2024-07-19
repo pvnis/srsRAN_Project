@@ -28,7 +28,7 @@ using namespace srsran;
 using namespace srs_cu_up;
 
 /// PDU session handling tests (creation/deletion)
-TEST_F(pdu_session_manager_test, when_valid_pdu_session_setup_item_session_can_be_added)
+TEST_P(pdu_session_manager_test_set_n3_ext_addr, when_valid_pdu_session_setup_item_session_can_be_added)
 {
   // no sessions added yet
   ASSERT_EQ(pdu_session_mng->get_nof_pdu_sessions(), 0);
@@ -47,7 +47,11 @@ TEST_F(pdu_session_manager_test, when_valid_pdu_session_setup_item_session_can_b
   // check successful outcome
   ASSERT_TRUE(setup_result.success);
   ASSERT_EQ(setup_result.gtp_tunnel.gtp_teid.value(), 1);
-  ASSERT_EQ(setup_result.drb_setup_results[0].gtp_tunnel.gtp_teid.value(), 0);
+  const std::string tp_address_expect = net_config.n3_ext_addr.empty() || net_config.n3_ext_addr == "auto"
+                                            ? net_config.n3_bind_addr
+                                            : net_config.n3_ext_addr;
+  ASSERT_EQ(setup_result.gtp_tunnel.tp_address.to_string(), tp_address_expect);
+  ASSERT_EQ(setup_result.drb_setup_results[0].gtp_tunnel.gtp_teid.value(), 1);
   ASSERT_EQ(pdu_session_mng->get_nof_pdu_sessions(), 1);
 
   // attempt to remove non-existing session
@@ -214,11 +218,11 @@ TEST_F(pdu_session_manager_test, drb_create_with_one_qfi_which_is_already_mapped
   EXPECT_TRUE(mod_result.success);
   ASSERT_EQ(mod_result.drb_setup_results.size(), 1);
   EXPECT_FALSE(mod_result.drb_setup_results[0].success);
-  EXPECT_EQ(mod_result.drb_setup_results[0].cause, cause_t{cause_radio_network_t::unspecified});
+  EXPECT_EQ(mod_result.drb_setup_results[0].cause, e1ap_cause_t{e1ap_cause_radio_network_t::unspecified});
   ASSERT_EQ(mod_result.drb_setup_results[0].qos_flow_results.size(), 1);
   EXPECT_FALSE(mod_result.drb_setup_results[0].qos_flow_results[0].success);
   EXPECT_EQ(mod_result.drb_setup_results[0].qos_flow_results[0].cause,
-            cause_t{cause_radio_network_t::multiple_qos_flow_id_instances});
+            e1ap_cause_t{e1ap_cause_radio_network_t::multiple_qos_flow_id_instances});
 
   // validate pdu session is not disconnected from GTP-U gateway
   EXPECT_EQ(pdu_session_mng->get_nof_pdu_sessions(), 1);
@@ -251,7 +255,7 @@ TEST_F(pdu_session_manager_test, drb_create_with_unknown_five_qi)
   ASSERT_EQ(setup_result.drb_setup_results.size(), 1);
 
   EXPECT_FALSE(setup_result.drb_setup_results[0].success);
-  EXPECT_EQ(setup_result.drb_setup_results[0].cause, cause_t{cause_radio_network_t::not_supported_5qi_value});
+  EXPECT_EQ(setup_result.drb_setup_results[0].cause, e1ap_cause_t{e1ap_cause_radio_network_t::not_supported_5qi_value});
   ASSERT_EQ(setup_result.drb_setup_results[0].qos_flow_results.size(), 0);
 }
 
@@ -302,13 +306,14 @@ TEST_F(pdu_session_manager_test, drb_create_with_two_qfi_of_which_one_is_already
   EXPECT_TRUE(mod_result.success);
   ASSERT_EQ(mod_result.drb_setup_results.size(), 1);
   EXPECT_TRUE(mod_result.drb_setup_results[0].success); // success, since at least one QFI mapping was valid
-  EXPECT_EQ(mod_result.drb_setup_results[0].cause, cause_t{cause_radio_network_t::unspecified});
+  EXPECT_EQ(mod_result.drb_setup_results[0].cause, e1ap_cause_t{e1ap_cause_radio_network_t::unspecified});
   ASSERT_EQ(mod_result.drb_setup_results[0].qos_flow_results.size(), 2);
   EXPECT_FALSE(mod_result.drb_setup_results[0].qos_flow_results[0].success); // the first was invalid
   EXPECT_EQ(mod_result.drb_setup_results[0].qos_flow_results[0].cause,
-            cause_t{cause_radio_network_t::multiple_qos_flow_id_instances});
+            e1ap_cause_t{e1ap_cause_radio_network_t::multiple_qos_flow_id_instances});
   EXPECT_TRUE(mod_result.drb_setup_results[0].qos_flow_results[1].success); // the second was valid
-  EXPECT_EQ(mod_result.drb_setup_results[0].qos_flow_results[1].cause, cause_t{cause_radio_network_t::unspecified});
+  EXPECT_EQ(mod_result.drb_setup_results[0].qos_flow_results[1].cause,
+            e1ap_cause_t{e1ap_cause_radio_network_t::unspecified});
 
   // validate pdu session is not disconnected from GTP-U gateway
   EXPECT_EQ(pdu_session_mng->get_nof_pdu_sessions(), 1);
@@ -385,7 +390,7 @@ TEST_F(pdu_session_manager_test, when_new_ul_info_is_requested_f1u_is_disconnect
   pdu_session_setup_result set_result = pdu_session_mng->setup_pdu_session(pdu_session_setup_item);
   ASSERT_EQ(pdu_session_mng->get_nof_pdu_sessions(), 1);
   drb_setup_result drb_setup_res = set_result.drb_setup_results[0];
-  ASSERT_EQ(drb_setup_res.gtp_tunnel.gtp_teid, 0x0);
+  ASSERT_EQ(drb_setup_res.gtp_tunnel.gtp_teid, 0x1);
 
   // prepare modification request (request new UL TNL info)
   e1ap_pdu_session_res_to_modify_item pdu_session_modify_item =
@@ -393,7 +398,17 @@ TEST_F(pdu_session_manager_test, when_new_ul_info_is_requested_f1u_is_disconnect
 
   pdu_session_modification_result mod_result  = pdu_session_mng->modify_pdu_session(pdu_session_modify_item, true);
   drb_setup_result                drb_mod_res = mod_result.drb_modification_results[0];
-  ASSERT_EQ(drb_mod_res.gtp_tunnel.gtp_teid, 0x1);
+  ASSERT_EQ(drb_mod_res.gtp_tunnel.gtp_teid, 0x2);
 
   ASSERT_EQ(pdu_session_mng->get_nof_pdu_sessions(), 1);
+}
+
+INSTANTIATE_TEST_SUITE_P(pdu_session_manager_test_n3_ext_addr,
+                         pdu_session_manager_test_set_n3_ext_addr,
+                         ::testing::Values("", "auto", "1.2.3.4"));
+
+int main(int argc, char** argv)
+{
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
 }

@@ -32,7 +32,7 @@ static sched_ue_creation_request_message make_scheduler_ue_creation_request(cons
   sched_ue_creation_request_message ret{};
   ret.ue_index           = request.ue_index;
   ret.crnti              = request.crnti;
-  ret.starts_in_fallback = true;
+  ret.starts_in_fallback = request.initial_fallback;
   ret.cfg                = request.sched_cfg;
   ret.tag_config         = request.mac_cell_group_cfg.tag_config;
   return ret;
@@ -80,10 +80,10 @@ async_task<bool> srsran_scheduler_adapter::handle_ue_creation_request(const mac_
     sched_impl->handle_ue_creation_request(make_scheduler_ue_creation_request(msg));
 
     // Await Scheduler notification that UE was added.
-    CORO_AWAIT(sched_cfg_notif_map[msg.ue_index].ue_config_ready);
+    CORO_AWAIT_VALUE(bool res, sched_cfg_notif_map[msg.ue_index].ue_config_ready);
     sched_cfg_notif_map[msg.ue_index].ue_config_ready.reset();
 
-    CORO_RETURN(true);
+    CORO_RETURN(res);
   });
 }
 
@@ -120,6 +120,11 @@ async_task<bool> srsran_scheduler_adapter::handle_ue_removal_request(const mac_u
 
     CORO_RETURN(true);
   });
+}
+
+void srsran_scheduler_adapter::handle_ue_config_applied(du_ue_index_t ue_index)
+{
+  sched_impl->handle_ue_config_applied(ue_index);
 }
 
 /// Converts BSR MAC CE (See 38.321, 6.1.3.1) to Scheduler UL BSR event type.
@@ -312,7 +317,8 @@ void srsran_scheduler_adapter::cell_handler::handle_crc(const mac_crc_indication
     pdu.ue_index                   = parent->rnti_mng[mac_pdu.rnti];
     pdu.harq_id                    = to_harq_id(mac_pdu.harq_id);
     pdu.tb_crc_success             = mac_pdu.tb_crc_success;
-    pdu.ul_sinr_metric             = mac_pdu.ul_sinr_metric;
+    pdu.ul_sinr_dB                 = mac_pdu.ul_sinr_dB;
+    pdu.ul_rsrp_dBFS               = mac_pdu.ul_rsrp_dBFS;
     pdu.time_advance_offset        = mac_pdu.time_advance_offset;
   }
 

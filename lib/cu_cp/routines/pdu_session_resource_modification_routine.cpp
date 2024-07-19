@@ -54,16 +54,16 @@ bool handle_procedure_response(cu_cp_pdu_session_resource_modify_response&      
 
 pdu_session_resource_modification_routine::pdu_session_resource_modification_routine(
     const cu_cp_pdu_session_resource_modify_request& modify_request_,
-    du_processor_e1ap_control_notifier&              e1ap_ctrl_notif_,
-    du_processor_f1ap_ue_context_notifier&           f1ap_ue_ctxt_notif_,
+    e1ap_bearer_context_manager&                     e1ap_bearer_ctxt_mng_,
+    f1ap_ue_context_manager&                         f1ap_ue_ctxt_mng_,
     du_processor_rrc_ue_control_message_notifier&    rrc_ue_notifier_,
-    up_resource_manager&                             rrc_ue_up_resource_manager_,
+    up_resource_manager&                             up_resource_mng_,
     srslog::basic_logger&                            logger_) :
   modify_request(modify_request_),
-  e1ap_ctrl_notifier(e1ap_ctrl_notif_),
-  f1ap_ue_ctxt_notifier(f1ap_ue_ctxt_notif_),
+  e1ap_bearer_ctxt_mng(e1ap_bearer_ctxt_mng_),
+  f1ap_ue_ctxt_mng(f1ap_ue_ctxt_mng_),
   rrc_ue_notifier(rrc_ue_notifier_),
-  rrc_ue_up_resource_manager(rrc_ue_up_resource_manager_),
+  up_resource_mng(up_resource_mng_),
   logger(logger_)
 {
 }
@@ -76,14 +76,14 @@ void pdu_session_resource_modification_routine::operator()(
   logger.debug("ue={}: \"{}\" initialized", modify_request.ue_index, name());
 
   // Perform initial sanity checks on incoming message.
-  if (!rrc_ue_up_resource_manager.validate_request(modify_request)) {
+  if (!up_resource_mng.validate_request(modify_request)) {
     logger.warning("ue={}: \"{}\" Invalid PduSessionResourceModification", modify_request.ue_index, name());
     CORO_EARLY_RETURN(generate_pdu_session_resource_modify_response(false));
   }
 
   {
     // Calculate next user-plane configuration based on incoming modify message.
-    next_config = rrc_ue_up_resource_manager.calculate_update(modify_request);
+    next_config = up_resource_mng.calculate_update(modify_request);
   }
 
   {
@@ -92,8 +92,9 @@ void pdu_session_resource_modification_routine::operator()(
     fill_initial_e1ap_bearer_context_modification_request(bearer_context_modification_request);
 
     // call E1AP procedure and wait for BearerContextModificationResponse
-    CORO_AWAIT_VALUE(bearer_context_modification_response,
-                     e1ap_ctrl_notifier.on_bearer_context_modification_request(bearer_context_modification_request));
+    CORO_AWAIT_VALUE(
+        bearer_context_modification_response,
+        e1ap_bearer_ctxt_mng.handle_bearer_context_modification_request(bearer_context_modification_request));
 
     // Handle BearerContextModificationResponse and fill subsequent UE context modification
     if (handle_procedure_response(response_msg,
@@ -112,7 +113,7 @@ void pdu_session_resource_modification_routine::operator()(
     ue_context_mod_request.ue_index = modify_request.ue_index;
 
     CORO_AWAIT_VALUE(ue_context_modification_response,
-                     f1ap_ue_ctxt_notifier.on_ue_context_modification_request(ue_context_mod_request));
+                     f1ap_ue_ctxt_mng.handle_ue_context_modification_request(ue_context_mod_request));
 
     // Handle UE Context Modification Response
     if (handle_procedure_response(response_msg,
@@ -132,8 +133,9 @@ void pdu_session_resource_modification_routine::operator()(
     bearer_context_modification_request.ue_index = modify_request.ue_index;
 
     // call E1AP procedure and wait for BearerContextModificationResponse
-    CORO_AWAIT_VALUE(bearer_context_modification_response,
-                     e1ap_ctrl_notifier.on_bearer_context_modification_request(bearer_context_modification_request));
+    CORO_AWAIT_VALUE(
+        bearer_context_modification_response,
+        e1ap_bearer_ctxt_mng.handle_bearer_context_modification_request(bearer_context_modification_request));
 
     // Handle BearerContextModificationResponse
     if (handle_procedure_response(response_msg,
@@ -151,22 +153,24 @@ void pdu_session_resource_modification_routine::operator()(
     // prepare RRC Reconfiguration and call RRC UE notifier
     {
       // get NAS PDUs as received by AMF
-      std::map<pdu_session_id_t, byte_buffer> nas_pdus;
+      std::vector<byte_buffer> nas_pdus;
       for (const auto& pdu_session : modify_request.pdu_session_res_modify_items) {
         if (!pdu_session.nas_pdu.empty()) {
-          nas_pdus.emplace(pdu_session.pdu_session_id, pdu_session.nas_pdu);
+          nas_pdus.push_back(pdu_session.nas_pdu);
         }
       }
 
       if (!fill_rrc_reconfig_args(rrc_reconfig_args,
                                   {},
                                   next_config.pdu_sessions_to_modify_list,
+                                  {} /* No extra DRB to be removed */,
                                   ue_context_modification_response.du_to_cu_rrc_info,
                                   nas_pdus,
                                   rrc_ue_notifier.generate_meas_config(),
                                   false,
                                   false,
                                   false,
+                                  {},
                                   logger)) {
         logger.warning("ue={}: \"{}\" Failed to fill RrcReconfiguration", modify_request.ue_index, name());
         CORO_EARLY_RETURN(generate_pdu_session_resource_modify_response(false));
@@ -290,7 +294,7 @@ void fill_modify_failed_list(cu_cp_pdu_session_resource_modify_response&      re
   for (const auto& item : modify_request.pdu_session_res_modify_items) {
     cu_cp_pdu_session_resource_failed_to_modify_item failed_item;
     failed_item.pdu_session_id              = item.pdu_session_id;
-    failed_item.unsuccessful_transfer.cause = cause_misc_t::unspecified;
+    failed_item.unsuccessful_transfer.cause = ngap_cause_misc_t::unspecified;
     response_msg.pdu_session_res_failed_to_modify_list.emplace(failed_item.pdu_session_id, failed_item);
   }
 }
@@ -316,7 +320,7 @@ void mark_all_sessions_as_failed(cu_cp_pdu_session_resource_modify_response&    
   for (const auto& modify_item : modify_request.pdu_session_res_modify_items) {
     cu_cp_pdu_session_resource_failed_to_modify_item failed_item;
     failed_item.pdu_session_id              = modify_item.pdu_session_id;
-    failed_item.unsuccessful_transfer.cause = cause_radio_network_t::unspecified;
+    failed_item.unsuccessful_transfer.cause = ngap_cause_radio_network_t::unspecified;
     response_msg.pdu_session_res_failed_to_modify_list.emplace(failed_item.pdu_session_id, failed_item);
   }
   // No PDU session modified can be successful at the same time.
@@ -334,12 +338,12 @@ pdu_session_resource_modification_routine::generate_pdu_session_resource_modify_
     for (const auto& pdu_session_to_mod : next_config.pdu_sessions_to_modify_list) {
       result.pdu_sessions_modified_list.push_back(pdu_session_to_mod.second);
     }
-    rrc_ue_up_resource_manager.apply_config_update(result);
+    up_resource_mng.apply_config_update(result);
 
     for (const auto& psi : next_config.pdu_sessions_failed_to_modify_list) {
       cu_cp_pdu_session_resource_failed_to_modify_item failed_item;
       failed_item.pdu_session_id              = psi;
-      failed_item.unsuccessful_transfer.cause = cause_radio_network_t::unspecified;
+      failed_item.unsuccessful_transfer.cause = ngap_cause_radio_network_t::unspecified;
       response_msg.pdu_session_res_failed_to_modify_list.emplace(failed_item.pdu_session_id, failed_item);
     }
   } else {

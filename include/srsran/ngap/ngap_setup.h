@@ -25,6 +25,7 @@
 #include "ngap_types.h"
 #include "srsran/cu_cp/cu_cp_types.h"
 #include "srsran/ran/crit_diagnostics.h"
+#include <variant>
 
 namespace srsran {
 namespace srs_cu_cp {
@@ -32,7 +33,7 @@ namespace srs_cu_cp {
 // enum class ngap_handov_type { intra5gs = 0, fivegs_to_eps, eps_to_5gs, fivegs_to_utran };
 
 struct ngap_broadcast_plmn_item {
-  std::string                       plmn_id;
+  plmn_identity                     plmn_id = plmn_identity::test_value();
   std::vector<slice_support_item_t> tai_slice_support_list;
 };
 
@@ -42,7 +43,7 @@ struct ngap_supported_ta_item {
 };
 
 struct ngap_ng_setup_request {
-  unsigned                            max_setup_retries = 5;
+  unsigned                            max_setup_retries = 1;
   cu_cp_global_gnb_id                 global_ran_node_id;
   std::string                         ran_node_name;
   std::vector<ngap_supported_ta_item> supported_ta_list;
@@ -53,8 +54,8 @@ struct ngap_ng_setup_request {
 };
 
 struct ngap_served_guami_item {
-  guami_t               guami;
-  optional<std::string> backup_amf_name;
+  guami_t                    guami;
+  std::optional<std::string> backup_amf_name;
 };
 
 struct ngap_plmn_support_item {
@@ -67,18 +68,18 @@ struct ngap_ng_setup_response {
   std::vector<ngap_served_guami_item> served_guami_list;
   uint16_t                            relative_amf_capacity;
   std::vector<ngap_plmn_support_item> plmn_support_list;
-  optional<crit_diagnostics_t>        crit_diagnostics;
+  std::optional<crit_diagnostics_t>   crit_diagnostics;
   // TODO: Add optional ue_retention_info;
   // TODO: Add optional iab_supported;
   // TODO: Add optional extended_amf_name;
 };
 
 struct ngap_ng_setup_failure {
-  cause_t                      cause;
-  optional<crit_diagnostics_t> crit_diagnostics;
+  ngap_cause_t                      cause;
+  std::optional<crit_diagnostics_t> crit_diagnostics;
 };
 
-using ngap_ng_setup_result = variant<ngap_ng_setup_response, ngap_ng_setup_failure>;
+using ngap_ng_setup_result = std::variant<ngap_ng_setup_response, ngap_ng_setup_failure>;
 
 } // namespace srs_cu_cp
 } // namespace srsran

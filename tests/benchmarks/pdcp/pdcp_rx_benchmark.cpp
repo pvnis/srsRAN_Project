@@ -28,10 +28,12 @@
 
 using namespace srsran;
 
-const std::array<uint8_t, 16> k_128_int =
+static constexpr std::array<uint8_t, 16> k_128_int =
     {0x16, 0x17, 0x18, 0x19, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x30, 0x31};
-const std::array<uint8_t, 16> k_128_enc =
+static constexpr std::array<uint8_t, 16> k_128_enc =
     {0x16, 0x17, 0x18, 0x19, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x30, 0x31};
+
+namespace {
 
 /// Mocking class of the surrounding layers invoked by the PDCP.
 class pdcp_tx_gen_frame : public pdcp_tx_lower_notifier, public pdcp_tx_upper_control_notifier
@@ -42,10 +44,9 @@ public:
   void on_protocol_failure() final {}
 
   /// PDCP TX lower layer data notifier
-  void on_new_pdu(pdcp_tx_pdu pdu) final
+  void on_new_pdu(byte_buffer pdu, bool is_retx) final
   {
-    byte_buffer_chain buf{std::move(pdu.buf)};
-    pdu_list.push_back(std::move(buf));
+    pdu_list.push_back(byte_buffer_chain::create(std::move(pdu)).value());
   }
   void                           on_discard_pdu(uint32_t pdcp_sn) final {}
   std::vector<byte_buffer_chain> pdu_list;
@@ -74,31 +75,49 @@ struct bench_params {
   bool     print_timing_info = false;
 };
 
-static void usage(const char* prog, const bench_params& params, int algo)
+struct app_params {
+  int                  algo         = -1;
+  srslog::basic_levels log_level    = srslog::basic_levels::error;
+  std::string          log_filename = "stdout";
+};
+
+} // namespace
+
+static void usage(const char* prog, const bench_params& params, const app_params& app)
 {
   fmt::print("Usage: {} [-R repetitions] [-s silent]\n", prog);
-  fmt::print("\t-a Security algorithm to use [Default {}, valid {{-1,0,1,2,3}}]\n", algo);
+  fmt::print("\t-a Security algorithm to use [Default {}, valid {{-1,0,1,2,3}}]\n", app.algo);
   fmt::print("\t-R Repetitions [Default {}]\n", params.nof_repetitions);
+  fmt::print("\t-l Log level to use [Default {}, valid {{error, warning, info, debug}}]\n", app.log_level);
+  fmt::print("\t-f Log filename to use [Default {}]\n", app.log_filename);
   fmt::print("\t-h Show this message\n");
 }
 
-static void parse_args(int argc, char** argv, bench_params& params, int& algo)
+static void parse_args(int argc, char** argv, bench_params& params, app_params& app)
 {
   int opt = 0;
-  while ((opt = getopt(argc, argv, "a:R:th")) != -1) {
+  while ((opt = getopt(argc, argv, "a:R:l:f:th")) != -1) {
     switch (opt) {
       case 'R':
         params.nof_repetitions = std::strtol(optarg, nullptr, 10);
         break;
       case 'a':
-        algo = std::strtol(optarg, nullptr, 10);
+        app.algo = std::strtol(optarg, nullptr, 10);
         break;
       case 't':
         params.print_timing_info = true;
         break;
+      case 'l': {
+        auto value    = srslog::str_to_basic_level(std::string(optarg));
+        app.log_level = value.has_value() ? value.value() : srslog::basic_levels::none;
+        break;
+      }
+      case 'f':
+        app.log_filename = std::string(optarg);
+        break;
       case 'h':
       default:
-        usage(argv[0], params, algo);
+        usage(argv[0], params, app);
         exit(0);
     }
   }
@@ -139,8 +158,8 @@ std::vector<byte_buffer_chain> gen_pdu_list(bench_params                  params
   pdcp_tx_gen_frame frame = {};
 
   // Create PDCP entities
-  std::unique_ptr<pdcp_entity_tx> pdcp_tx =
-      std::make_unique<pdcp_entity_tx>(0, drb_id_t::drb1, config, frame, frame, timer_factory{timers, worker});
+  std::unique_ptr<pdcp_entity_tx> pdcp_tx = std::make_unique<pdcp_entity_tx>(
+      0, drb_id_t::drb1, config, frame, frame, timer_factory{timers, worker}, worker, worker);
   pdcp_tx->configure_security(sec_cfg);
   pdcp_tx->set_integrity_protection(int_enabled);
   pdcp_tx->set_ciphering(ciph_enabled);
@@ -203,8 +222,8 @@ void benchmark_pdcp_rx(bench_params                  params,
   pdcp_rx_test_frame frame = {};
 
   // Create PDCP entities
-  std::unique_ptr<pdcp_entity_rx> pdcp_rx =
-      std::make_unique<pdcp_entity_rx>(0, drb_id_t::drb1, config, frame, frame, timer_factory{timers, worker});
+  std::unique_ptr<pdcp_entity_rx> pdcp_rx = std::make_unique<pdcp_entity_rx>(
+      0, drb_id_t::drb1, config, frame, frame, timer_factory{timers, worker}, worker, worker);
   pdcp_rx->configure_security(sec_cfg);
   pdcp_rx->set_integrity_protection(int_enabled);
   pdcp_rx->set_ciphering(ciph_enabled);
@@ -264,20 +283,27 @@ int run_benchmark(bench_params params, int algo)
 
 int main(int argc, char** argv)
 {
-  srslog::init();
-  srslog::fetch_basic_logger("PDCP").set_level(srslog::basic_levels::error);
-
-  int          algo = -1;
   bench_params params{};
-  parse_args(argc, argv, params, algo);
+  app_params   app_params{};
+  parse_args(argc, argv, params, app_params);
 
-  if (algo != -1 && algo != 0 && algo != 1 && algo != 2 && algo != 3) {
+  srslog::init();
+  srslog::sink* log_sink = (app_params.log_filename == "stdout") ? srslog::create_stdout_sink()
+                                                                 : srslog::create_file_sink(app_params.log_filename);
+  if (log_sink == nullptr) {
+    return -1;
+  }
+  srslog::set_default_sink(*log_sink);
+  srslog::fetch_basic_logger("PDCP").set_level(app_params.log_level);
+
+  if (app_params.algo != -1 && app_params.algo != 0 && app_params.algo != 1 && app_params.algo != 2 &&
+      app_params.algo != 3) {
     fmt::print("Unsupported algorithm. Use -1, 0, 1, 2 or 3.\n");
     return -1;
   }
 
-  if (algo != -1) {
-    run_benchmark(params, algo);
+  if (app_params.algo != -1) {
+    run_benchmark(params, app_params.algo);
   } else {
     for (unsigned i = 0; i < 4; i++) {
       run_benchmark(params, i);

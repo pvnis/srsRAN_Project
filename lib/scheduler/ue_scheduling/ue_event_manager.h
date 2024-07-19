@@ -26,7 +26,7 @@
 #include "../policy/scheduler_policy.h"
 #include "../support/slot_event_list.h"
 #include "ue.h"
-#include "ue_srb0_scheduler.h"
+#include "ue_fallback_scheduler.h"
 #include "srsran/adt/unique_function.h"
 #include "srsran/ran/du_types.h"
 #include "srsran/ran/uci/uci_constants.h"
@@ -35,6 +35,7 @@ namespace srsran {
 
 class scheduler_metrics_handler;
 class scheduler_event_logger;
+class uci_scheduler_impl;
 
 /// \brief Class used to manage events that arrive to the scheduler and are directed at UEs.
 /// This class acts as a facade for several of the ue_scheduler subcomponents, managing the asynchronous configuration
@@ -44,15 +45,19 @@ class ue_event_manager final : public sched_ue_configuration_handler,
                                public scheduler_dl_buffer_state_indication_handler
 {
 public:
-  ue_event_manager(ue_repository& ue_db, scheduler_metrics_handler& metrics_handler, scheduler_event_logger& ev_logger);
+  ue_event_manager(ue_repository& ue_db, scheduler_metrics_handler& metrics_handler);
   ~ue_event_manager();
 
-  void add_cell(cell_resource_allocator& cell_res_grid, ue_srb0_scheduler& srb0_sched);
+  void add_cell(cell_resource_allocator& cell_res_grid,
+                ue_fallback_scheduler&   fallback_sched,
+                uci_scheduler_impl&      uci_sched,
+                scheduler_event_logger&  ev_logger);
 
   /// UE Add/Mod/Remove interface.
   void handle_ue_creation(ue_config_update_event ev) override;
   void handle_ue_reconfiguration(ue_config_update_event ev) override;
   void handle_ue_deletion(ue_config_delete_event ev) override;
+  void handle_ue_config_applied(du_ue_index_t ue_idx) override;
 
   /// Scheduler feedback handler interface.
   void handle_ul_bsr_indication(const ul_bsr_indication_message& bsr) override;
@@ -109,12 +114,11 @@ private:
   void handle_harq_ind(ue_cell&                               ue_cc,
                        slot_point                             uci_sl,
                        span<const mac_harq_ack_report_status> harq_bits,
-                       optional<float>                        pucch_snr);
+                       std::optional<float>                   pucch_snr);
   void handle_csi(ue_cell& ue_cc, const csi_report_data& csi_rep);
 
   ue_repository&             ue_db;
   scheduler_metrics_handler& metrics_handler;
-  scheduler_event_logger&    ev_logger;
   srslog::basic_logger&      logger;
 
   /// List of added and configured cells.
@@ -123,8 +127,13 @@ private:
 
     cell_resource_allocator* res_grid = nullptr;
 
-    /// Reference to SRB0 and other bearers scheduler
-    ue_srb0_scheduler* srb0_sched = nullptr;
+    // Reference to fallback scheduler.
+    ue_fallback_scheduler* fallback_sched = nullptr;
+
+    // Reference to the CSI and SR UCI scheduler.
+    uci_scheduler_impl* uci_sched = nullptr;
+
+    scheduler_event_logger* ev_logger = nullptr;
   };
   std::array<du_cell, MAX_NOF_DU_CELLS> du_cells{};
 

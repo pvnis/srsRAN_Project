@@ -22,6 +22,7 @@
 
 #include "lib/rlc/rlc_rx_am_entity.h"
 #include "lib/rlc/rlc_tx_am_entity.h"
+#include "tests/test_doubles/pdcp/pdcp_pdu_generator.h"
 #include "srsran/support/benchmark_utils.h"
 #include "srsran/support/executors/manual_task_worker.h"
 #include <getopt.h>
@@ -46,8 +47,9 @@ public:
 
   // rlc_tx_upper_layer_data_notifier interface
   void on_transmitted_sdu(uint32_t max_tx_pdcp_sn) override {}
-
   void on_delivered_sdu(uint32_t max_deliv_pdcp_sn) override {}
+  void on_retransmitted_sdu(uint32_t max_retx_pdcp_sn) override {}
+  void on_delivered_retransmitted_sdu(uint32_t max_deliv_retx_pdcp_sn) override {}
 
   // rlc_tx_upper_layer_control_notifier interface
   void on_protocol_failure() override {}
@@ -81,6 +83,8 @@ public:
 
 struct bench_params {
   unsigned nof_repetitions = 10000;
+  unsigned sdu_size        = 1500;
+  unsigned pdu_size        = 1550;
 };
 
 enum class rx_order {
@@ -94,16 +98,24 @@ static void usage(const char* prog, const bench_params& params)
 {
   fmt::print("Usage: {} [-R repetitions] [-s silent]\n", prog);
   fmt::print("\t-R Repetitions [Default {}]\n", params.nof_repetitions);
+  fmt::print("\t-s SDU size [Default {}]\n", params.sdu_size);
+  fmt::print("\t-p PDU size [Default {}]\n", params.pdu_size);
   fmt::print("\t-h Show this message\n");
 }
 
 static void parse_args(int argc, char** argv, bench_params& params)
 {
   int opt = 0;
-  while ((opt = getopt(argc, argv, "R:h")) != -1) {
+  while ((opt = getopt(argc, argv, "R:s:p:h")) != -1) {
     switch (opt) {
       case 'R':
         params.nof_repetitions = std::strtol(optarg, nullptr, 10);
+        break;
+      case 's':
+        params.sdu_size = std::strtol(optarg, nullptr, 10);
+        break;
+      case 'p':
+        params.pdu_size = std::strtol(optarg, nullptr, 10);
         break;
       case 'h':
       default:
@@ -118,11 +130,13 @@ std::vector<byte_buffer> generate_pdus(bench_params params, rx_order order)
   // Set Tx config
   rlc_tx_am_config config;
   config.sn_field_length = rlc_am_sn_size::size18bits;
+  config.pdcp_sn_len     = pdcp_sn_size::size18bits;
   config.t_poll_retx     = 45;
   config.max_retx_thresh = 4;
   config.poll_pdu        = 4;
   config.poll_byte       = 25;
   config.queue_size      = 4096;
+  config.max_window      = 0;
 
   // Create test frame
   auto tester = std::make_unique<rlc_tx_am_test_frame>(config.sn_field_length);
@@ -135,13 +149,13 @@ std::vector<byte_buffer> generate_pdus(bench_params params, rx_order order)
   std::unique_ptr<rlc_tx_am_entity> rlc_tx = nullptr;
 
   auto& logger = srslog::fetch_basic_logger("RLC");
-  logger.set_level(srslog::str_to_basic_level("warning"));
+  logger.set_level(srslog::basic_levels::warning);
 
   null_rlc_pcap pcap;
 
   // Make PDUs
   std::vector<byte_buffer> pdus;
-  rlc_tx = std::make_unique<rlc_tx_am_entity>(0,
+  rlc_tx = std::make_unique<rlc_tx_am_entity>(gnb_du_id_t::min,
                                               du_ue_index_t::MIN_DU_UE_INDEX,
                                               srb_id_t::srb0,
                                               config,
@@ -158,30 +172,23 @@ std::vector<byte_buffer> generate_pdus(bench_params params, rx_order order)
   rlc_tx->set_status_provider(tester.get());
 
   // Prepare SDU list for benchmark
-  std::vector<byte_buffer> sdu_list  = {};
-  int                      num_sdus  = params.nof_repetitions + 1; // +1 to expire t_reassembly on setup
-  int                      num_bytes = 1500;
+  int num_sdus  = params.nof_repetitions + 1; // +1 to expire t_reassembly on setup
+  int num_bytes = params.sdu_size;
+  int num_pdus  = 0;
+  int pdu_size  = params.pdu_size;
   for (int i = 0; i < num_sdus; i++) {
-    byte_buffer sdu_buf = {};
-    for (int j = 0; j < num_bytes; ++j) {
-      report_error_if_not(sdu_buf.append(rand()), "Failed to allocate SDU");
+    byte_buffer sdu = test_helpers::create_pdcp_pdu(config.pdcp_sn_len, i, num_bytes, i);
+    rlc_tx->handle_sdu(std::move(sdu), false);
+    while (rlc_tx->get_buffer_state() > 0) {
+      std::vector<uint8_t> pdu_buf;
+      pdu_buf.resize(pdu_size);
+      size_t pdu_len = rlc_tx->pull_pdu(pdu_buf);
+      pdu_buf.resize(pdu_len);
+      auto buf = byte_buffer::create(pdu_buf);
+      report_error_if_not(buf.has_value(), "Failed to allocate byte_buffer");
+      pdus.emplace_back(std::move(buf.value()));
+      num_pdus++;
     }
-    sdu_list.push_back(std::move(sdu_buf));
-  }
-
-  for (int i = 0; i < num_sdus; i++) {
-    rlc_sdu     sdu;
-    byte_buffer pdcp_hdr_buf = {0x80, 0x00, 0x16};
-    byte_buffer sdu_buf      = std::move(sdu_list[i]);
-    sdu.pdcp_sn              = i;
-    sdu.buf                  = std::move(pdcp_hdr_buf);
-    report_error_if_not(sdu.buf.append(std::move(sdu_buf)), "Failed to allocate SDU");
-    rlc_tx->handle_sdu(std::move(sdu));
-    std::vector<uint8_t> pdu_buf;
-    pdu_buf.resize(1550);
-    size_t pdu_len = rlc_tx->pull_pdu(pdu_buf);
-    pdu_buf.resize(pdu_len);
-    pdus.push_back(byte_buffer{pdu_buf});
   }
 
   // shuffle PDUs according to requested order
@@ -195,14 +202,14 @@ std::vector<byte_buffer> generate_pdus(bench_params params, rx_order order)
       std::reverse(pdus.begin(), pdus.end());
       break;
     case rx_order::even_odd:
-      std::vector<byte_buffer> sdu_list_mod;
-      for (int i = 0; i < num_sdus; i += 2) {
-        sdu_list_mod.push_back(std::move(sdu_list[i]));
+      std::vector<byte_buffer> pdus_mod;
+      for (int i = 0; i < num_pdus; i += 2) {
+        pdus_mod.push_back(std::move(pdus[i]));
       }
-      for (int i = 1; i < num_sdus; i += 2) {
-        sdu_list_mod.push_back(std::move(sdu_list[i]));
+      for (int i = 1; i < num_pdus; i += 2) {
+        pdus_mod.push_back(std::move(pdus[i]));
       }
-      sdu_list = std::move(sdu_list_mod);
+      pdus = std::move(pdus_mod);
       break;
   }
 
@@ -231,7 +238,7 @@ void benchmark_rx_pdu(const bench_params& params, rx_order order)
   config.t_reassembly      = 200;
 
   // Create RLC AM RX entity
-  std::unique_ptr<rlc_rx_am_entity> rlc_rx = std::make_unique<rlc_rx_am_entity>(0,
+  std::unique_ptr<rlc_rx_am_entity> rlc_rx = std::make_unique<rlc_rx_am_entity>(gnb_du_id_t::min,
                                                                                 du_ue_index_t::MIN_DU_UE_INDEX,
                                                                                 srb_id_t::srb0,
                                                                                 config,

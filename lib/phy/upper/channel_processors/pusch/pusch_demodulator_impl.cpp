@@ -67,7 +67,7 @@ revert_scrambling(span<log_likelihood_ratio> out, span<const log_likelihood_rati
     mask = _mm_cmpeq_epi8(mask, _mm_set_epi64x(0x0102040810204080, 0x0102040810204080));
 
     // Load input.
-    __m128i v = _mm_loadu_si128(reinterpret_cast<const __m128i*>(&in[i]));
+    __m128i v = _mm_loadu_si128(reinterpret_cast<const __m128i*>(in.data() + i));
 
     // Negate.
     v = _mm_xor_si128(mask, v);
@@ -76,7 +76,7 @@ revert_scrambling(span<log_likelihood_ratio> out, span<const log_likelihood_rati
     mask = _mm_and_si128(mask, _mm_set1_epi8(1));
     v    = _mm_add_epi8(v, mask);
 
-    _mm_storeu_si128(reinterpret_cast<__m128i*>(&out[i]), v);
+    _mm_storeu_si128(reinterpret_cast<__m128i*>(out.data() + i), v);
   }
 #endif // __SSE3__
 
@@ -106,7 +106,7 @@ revert_scrambling(span<log_likelihood_ratio> out, span<const log_likelihood_rati
     mask_u8 = vceqq_u8(mask_u8, bit_masks_u8);
 
     // Load input.
-    int8x16_t v = vld1q_s8(reinterpret_cast<const int8_t*>(&in[i]));
+    int8x16_t v = vld1q_s8(reinterpret_cast<const int8_t*>(in.data() + i));
 
     // Negate.
     v = veorq_s8(vreinterpretq_s8_u8(mask_u8), v);
@@ -116,7 +116,7 @@ revert_scrambling(span<log_likelihood_ratio> out, span<const log_likelihood_rati
     v                = vaddq_s8(v, one_s8);
 
     // Store the result.
-    vst1q_s8(reinterpret_cast<int8_t*>(&out[i]), v);
+    vst1q_s8(reinterpret_cast<int8_t*>(out.data() + i), v);
   }
 #endif // __aarch64__
 
@@ -196,10 +196,18 @@ void pusch_demodulator_impl::demodulate(pusch_codeword_buffer&      codeword_buf
                     "The codeword block size (i.e., {}) must be multiple of the number of bits per RE (i.e., {}).",
                     codeword_block.size(),
                     nof_bits_per_re);
-      nof_block_subc = std::min(nof_block_subc, static_cast<unsigned>(codeword_block.size()) / nof_bits_per_re);
 
       // Extract mask for the block.
+      // First, get the mask of data REs in the current block of received symbols.
       re_symbol_mask_type block_re_mask = symbol_re_mask.slice(i_subc, i_subc + nof_block_subc);
+      // Next, get the number of subcarriers needed to carry the current codeword block.
+      unsigned nof_required_subc = static_cast<unsigned>(codeword_block.size()) / nof_bits_per_re;
+      // Ensure the number of data REs in the block of received symbols is not larger than the codeword block (expressed
+      // as a number of subcarriers).
+      while (block_re_mask.count() > nof_required_subc) {
+        --nof_block_subc;
+        block_re_mask = symbol_re_mask.slice(i_subc, i_subc + nof_block_subc);
+      }
 
       // Number of data Resource Elements in a slot for a single Rx port.
       unsigned nof_re_port = static_cast<unsigned>(block_re_mask.count());
@@ -215,8 +223,8 @@ void pusch_demodulator_impl::demodulate(pusch_codeword_buffer&      codeword_buf
       ch_estimates.resize({nof_re_port, nof_rx_ports, config.nof_tx_layers});
 
       // Resize equalizer output buffers.
-      eq_re.resize({nof_re_port, config.nof_tx_layers});
-      eq_noise_vars.resize({nof_re_port, config.nof_tx_layers});
+      span<cf_t>  eq_re         = span<cf_t>(temp_eq_re).first(nof_re_port * config.nof_tx_layers);
+      span<float> eq_noise_vars = span<float>(temp_eq_noise_vars).first(nof_re_port * config.nof_tx_layers);
 
       // Extract the data symbols and channel estimates from the resource grid.
       get_ch_data_re(ch_re, grid, i_symbol, i_subc, block_re_mask, config.rx_ports);
@@ -236,9 +244,8 @@ void pusch_demodulator_impl::demodulate(pusch_codeword_buffer&      codeword_buf
 
       // Estimate post equalization Signal-to-Interference-plus-Noise Ratio.
       if (compute_post_eq_sinr) {
-        span<const float> all_eq_noise_vars = eq_noise_vars.get_data();
         noise_var_accumulate += std::accumulate(
-            all_eq_noise_vars.begin(), all_eq_noise_vars.end(), 0.0F, [&sinr_softbit_count](float sum, float in) {
+            eq_noise_vars.begin(), eq_noise_vars.end(), 0.0F, [&sinr_softbit_count](float sum, float in) {
               // Exclude outliers with infinite variance. This makes sure that handling of the DC carrier does not skew
               // the SINR results.
               if (std::isinf(in)) {
@@ -250,24 +257,17 @@ void pusch_demodulator_impl::demodulate(pusch_codeword_buffer&      codeword_buf
             });
       }
 
-      // For now, layer demapping is not implemented.
-      srsran_assert(config.nof_tx_layers == 1, "Only a single transmit layer is supported.");
-
-      // Get the equalized resource elements and noise variances for a single transmit layer.
-      span<const cf_t>  eq_re_flat   = eq_re.get_view({0});
-      span<const float> eq_vars_flat = eq_noise_vars.get_view({0});
-
       // Get codeword buffer.
       unsigned                   nof_block_softbits = nof_re_port * nof_bits_per_re;
       span<log_likelihood_ratio> codeword           = codeword_block.first(nof_block_softbits);
 
       // Build LLRs from channel symbols.
-      demapper->demodulate_soft(codeword, eq_re_flat, eq_vars_flat, config.modulation);
+      demapper->demodulate_soft(codeword, eq_re, eq_noise_vars, config.modulation);
 
       // Calculate EVM only if it is available.
       if (evm_calc) {
-        unsigned nof_re_evm = eq_re_flat.size();
-        evm_accumulate += static_cast<float>(nof_re_evm) * evm_calc->calculate(codeword, eq_re_flat, config.modulation);
+        unsigned nof_re_evm = eq_re.size();
+        evm_accumulate += static_cast<float>(nof_re_evm) * evm_calc->calculate(codeword, eq_re, config.modulation);
         evm_symbol_count += nof_re_evm;
       }
 

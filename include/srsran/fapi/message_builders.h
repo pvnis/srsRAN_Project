@@ -84,11 +84,7 @@ public:
 class dl_ssb_pdu_builder
 {
 public:
-  explicit dl_ssb_pdu_builder(dl_ssb_pdu& pdu_) : pdu(pdu_), v3(pdu_.ssb_maintenance_v3)
-  {
-    v3.ss_pbch_block_power_scaling = std::numeric_limits<decltype(v3.ss_pbch_block_power_scaling)>::min();
-    v3.beta_pss_profile_sss        = std::numeric_limits<decltype(v3.beta_pss_profile_sss)>::min();
-  }
+  explicit dl_ssb_pdu_builder(dl_ssb_pdu& pdu_) : pdu(pdu_), v3(pdu_.ssb_maintenance_v3) {}
 
   /// Sets the basic parameters for the fields of the SSB/PBCH PDU.
   /// \note These parameters are specified in SCF-222 v4.0 section 3.4.2.4, in table SSB/PBCH PDU.
@@ -170,39 +166,6 @@ public:
     return *this;
   }
 
-  /// Sets the SSB power information and returns a reference to the builder.
-  /// \note These parameters are specified in SCF-222 v4.0 section 3.4.2.4, in table SSB/PBCH PDU maintenance FAPIv3.
-  dl_ssb_pdu_builder& set_maintenance_v3_tx_power_info(optional<float> power_scaling_ss_pbch_dB,
-                                                       optional<float> pss_to_sss_ratio_dB)
-  {
-    // Power scaling in SS-PBCH in hundredths of dBs.
-    int ss_block_power = (power_scaling_ss_pbch_dB) ? static_cast<int>(power_scaling_ss_pbch_dB.value() * 100) : -32768;
-    srsran_assert(ss_block_power <= std::numeric_limits<decltype(v3.ss_pbch_block_power_scaling)>::max(),
-                  "SS PBCH block power scaling ({}) exceeds the maximum ({}).",
-                  ss_block_power,
-                  std::numeric_limits<decltype(v3.ss_pbch_block_power_scaling)>::max());
-    srsran_assert(ss_block_power >= std::numeric_limits<decltype(v3.ss_pbch_block_power_scaling)>::min(),
-                  "SS PBCH block power scaling ({}) does not reach the minimum ({}).",
-                  ss_block_power,
-                  std::numeric_limits<decltype(v3.ss_pbch_block_power_scaling)>::min());
-    v3.ss_pbch_block_power_scaling = static_cast<decltype(v3.ss_pbch_block_power_scaling)>(ss_block_power);
-
-    // SSS to PSS ratio in thousandths of dBs.
-    int beta_pss = (pss_to_sss_ratio_dB) ? static_cast<int>(pss_to_sss_ratio_dB.value() * 1000) : -32768;
-    srsran_assert(beta_pss <= std::numeric_limits<decltype(v3.beta_pss_profile_sss)>::max(),
-                  "PSS to SSS ratio ({}) exceeds the maximum ({}).",
-                  beta_pss,
-                  std::numeric_limits<decltype(v3.beta_pss_profile_sss)>::max());
-    srsran_assert(beta_pss >= std::numeric_limits<decltype(v3.beta_pss_profile_sss)>::min(),
-                  "PSS to SSS ratio ({}) does not reach the minimum ({}).",
-                  beta_pss,
-                  std::numeric_limits<decltype(v3.beta_pss_profile_sss)>::min());
-
-    v3.beta_pss_profile_sss = static_cast<decltype(v3.beta_pss_profile_sss)>(beta_pss);
-
-    return *this;
-  }
-
   /// Returns a transmission precoding and beamforming PDU builder of this SSB PDU.
   tx_precoding_and_beamforming_pdu_builder get_tx_precoding_and_beamforming_pdu_builder()
   {
@@ -226,10 +189,7 @@ public:
                      dl_pdcch_pdu_parameters_v4::dci_params&        pdu_v4_) :
     pdu(pdu_), pdu_v3(pdu_v3_), pdu_v4(pdu_v4_)
   {
-    pdu_v3.pdcch_data_power_offset_profile_sss =
-        std::numeric_limits<decltype(pdu_v3.pdcch_data_power_offset_profile_sss)>::min();
-    pdu_v3.pdcch_dmrs_power_offset_profile_sss =
-        std::numeric_limits<decltype(pdu_v3.pdcch_dmrs_power_offset_profile_sss)>::min();
+    pdu_v3.collocated_AL16_candidate = false;
   }
 
   /// Sets the basic parameters for the fields of the DL DCI PDU.
@@ -251,22 +211,9 @@ public:
 
   /// Sets the transmission power info parameters for the fields of the DL DCI PDU.
   /// \note These parameters are specified in SCF-222 v4.0 section 3.4.2.1, in table DL DCI PDU.
-  dl_dci_pdu_builder& set_tx_power_info_parameter(optional<float> power_control_offset_ss_profile_nr_dB)
+  dl_dci_pdu_builder& set_tx_power_info_parameter(int power_control_offset_ss_dB)
   {
-    int value = (power_control_offset_ss_profile_nr_dB)
-                    ? static_cast<int>(power_control_offset_ss_profile_nr_dB.value())
-                    : -127;
-
-    srsran_assert(value <= std::numeric_limits<decltype(pdu.power_control_offset_ss_profile_nr)>::max(),
-                  "SS profile NR ({}) exceeds the maximum ({}).",
-                  value,
-                  std::numeric_limits<decltype(pdu.power_control_offset_ss_profile_nr)>::max());
-    srsran_assert(value >= std::numeric_limits<int8_t>::min(),
-                  "SS profile NR ({}) does not reach the minimum ({}).",
-                  value,
-                  std::numeric_limits<decltype(pdu.power_control_offset_ss_profile_nr)>::min());
-
-    pdu.power_control_offset_ss_profile_nr = static_cast<decltype(pdu.power_control_offset_ss_profile_nr)>(value);
+    pdu.power_control_offset_ss_profile_nr = power_control_offset_ss_dB;
 
     return *this;
   }
@@ -276,52 +223,6 @@ public:
   dl_dci_pdu_builder& set_payload(const dci_payload& payload)
   {
     pdu.payload = payload;
-
-    return *this;
-  }
-
-  /// Sets the maintenance v3 DCI parameters of the PDCCH PDU.
-  /// \note These parameters are specified in SCF-222 v4.0 section 3.4.2.1, in table PDCCH PDU maintenance FAPIv3.
-  dl_dci_pdu_builder& set_maintenance_v3_dci_parameters(bool            collocated_al16_candidate_present,
-                                                        optional<float> pdcch_dmrs_power_offset_profile_sss_dB,
-                                                        optional<float> pdcch_data_power_offset_profile_sss_dB)
-  {
-    pdu_v3.collocated_AL16_candidate = collocated_al16_candidate_present;
-
-    static constexpr int USE_OTHER_FIELDS =
-        std::numeric_limits<decltype(pdu_v3.pdcch_dmrs_power_offset_profile_sss)>::min();
-
-    int value = (pdcch_dmrs_power_offset_profile_sss_dB)
-                    ? static_cast<int>(pdcch_dmrs_power_offset_profile_sss_dB.value() * 1000)
-                    : USE_OTHER_FIELDS;
-
-    srsran_assert(value <= std::numeric_limits<decltype(pdu_v3.pdcch_dmrs_power_offset_profile_sss)>::max(),
-                  "PDCCH DMRS power offset profile SSS ({}) exceeds the maximum ({}).",
-                  value,
-                  std::numeric_limits<decltype(pdu_v3.pdcch_dmrs_power_offset_profile_sss)>::max());
-    srsran_assert(value >= std::numeric_limits<decltype(pdu_v3.pdcch_dmrs_power_offset_profile_sss)>::min(),
-                  "PDCCH DMRS power offset profile SSS ({}) is under the minimum ({}).",
-                  value,
-                  std::numeric_limits<decltype(pdu_v3.pdcch_dmrs_power_offset_profile_sss)>::min());
-
-    pdu_v3.pdcch_dmrs_power_offset_profile_sss =
-        static_cast<decltype(pdu_v3.pdcch_dmrs_power_offset_profile_sss)>(value);
-
-    value = (pdcch_data_power_offset_profile_sss_dB)
-                ? static_cast<int>(pdcch_data_power_offset_profile_sss_dB.value() * 1000)
-                : USE_OTHER_FIELDS;
-
-    srsran_assert(value <= std::numeric_limits<decltype(pdu_v3.pdcch_data_power_offset_profile_sss)>::max(),
-                  "PDCCH data power offset profile SSS ({}) exceeds the maximum ({}).",
-                  value,
-                  std::numeric_limits<decltype(pdu_v3.pdcch_data_power_offset_profile_sss)>::max());
-    srsran_assert(value >= std::numeric_limits<decltype(pdu_v3.pdcch_data_power_offset_profile_sss)>::min(),
-                  "PDCCH data power offset profile SSS ({}) is under the minimum ({}).",
-                  value,
-                  std::numeric_limits<decltype(pdu_v3.pdcch_data_power_offset_profile_sss)>::min());
-
-    pdu_v3.pdcch_data_power_offset_profile_sss =
-        static_cast<decltype(pdu_v3.pdcch_data_power_offset_profile_sss)>(value);
 
     return *this;
   }
@@ -336,8 +237,9 @@ public:
   }
 
   /// Sets the PDCCH context as vendor specific.
-  dl_dci_pdu_builder
-  set_context_vendor_specific(search_space_id ss_id, const char* dci_format, optional<unsigned> harq_feedback_timing)
+  dl_dci_pdu_builder set_context_vendor_specific(search_space_id         ss_id,
+                                                 const char*             dci_format,
+                                                 std::optional<unsigned> harq_feedback_timing)
   {
     pdu.context = pdcch_context(ss_id, dci_format, harq_feedback_timing);
     return *this;
@@ -608,19 +510,11 @@ public:
 
   /// Sets the Tx Power info parameters for the fields of the PDSCH PDU.
   /// \note These parameters are specified in SCF-222 v4.0 section 3.4.2.2, in table PDSCH PDU.
-  dl_pdsch_pdu_builder& set_tx_power_info_parameters(optional<int>          power_control_offset_profile_nr,
-                                                     nzp_csi_rs_epre_to_ssb ss_profile_nr)
+  dl_pdsch_pdu_builder& set_tx_power_info_parameters(int                     power_control_offset,
+                                                     power_control_offset_ss power_control_offset_ss)
   {
-    unsigned power_profile_nr =
-        power_control_offset_profile_nr ? static_cast<unsigned>(power_control_offset_profile_nr.value() + 8U) : 255U;
-
-    srsran_assert(power_profile_nr <= std::numeric_limits<uint8_t>::max(),
-                  "Power control offset Profile NR value exceeds the maximum ({}).",
-                  power_profile_nr);
-
-    pdu.power_control_offset_profile_nr = static_cast<uint8_t>(power_profile_nr);
-
-    pdu.power_control_offset_ss_profile_nr = ss_profile_nr;
+    pdu.power_control_offset_profile_nr    = power_control_offset;
+    pdu.power_control_offset_ss_profile_nr = power_control_offset_ss;
 
     return *this;
   }
@@ -730,74 +624,11 @@ public:
     return *this;
   }
 
-  /// Sets the maintenance v3 Tx power info parameters for the fields of the PDSCH PDU.
-  /// \note These parameters are specified in SCF-222 v4.0 section 3.4.2.2, in table PDSCH maintenance parameters v3.
-  dl_pdsch_pdu_builder& set_maintenance_v3_tx_power_info_parameters(optional<float> dmrs_power_offset_profile_sss,
-                                                                    optional<float> data_power_offset_profile_sss)
-  {
-    static constexpr int USE_OTHER_FIELDS = std::numeric_limits<int16_t>::min();
-
-    int value = (dmrs_power_offset_profile_sss) ? static_cast<int>(dmrs_power_offset_profile_sss.value() * 1000)
-                                                : USE_OTHER_FIELDS;
-
-    srsran_assert(value <= std::numeric_limits<int16_t>::max(),
-                  "PDSCH DMRS power offset profile SSS ({}) exceeds the maximum ({}).",
-                  value,
-                  std::numeric_limits<int16_t>::max());
-    srsran_assert(value >= std::numeric_limits<int16_t>::min(),
-                  "PDSCH DMRS power offset profile SSS ({}) is under the minimum ({}).",
-                  value,
-                  std::numeric_limits<int16_t>::min());
-
-    pdu.pdsch_maintenance_v3.pdsch_dmrs_power_offset_profile_sss = static_cast<int16_t>(value);
-
-    value = (data_power_offset_profile_sss) ? static_cast<int>(data_power_offset_profile_sss.value() * 1000)
-                                            : USE_OTHER_FIELDS;
-
-    srsran_assert(value <= std::numeric_limits<int16_t>::max(),
-                  "PDSCH data power offset profile SSS ({}) exceeds the maximum ({}).",
-                  value,
-                  std::numeric_limits<int16_t>::max());
-    srsran_assert(value >= std::numeric_limits<int16_t>::min(),
-                  "PDSCH data power offset profile SSS ({}) is under the minimum ({}).",
-                  value,
-                  std::numeric_limits<int16_t>::min());
-
-    pdu.pdsch_maintenance_v3.pdsch_data_power_offset_profile_sss = static_cast<int16_t>(value);
-
-    return *this;
-  }
-
   /// Sets the maintenance v3 CBG retx control parameters for the fields of the PDSCH PDU.
   /// \note These parameters are specified in SCF-222 v4.0 section 3.4.2.2, in table PDSCH maintenance parameters v3.
   dl_pdsch_pdu_builder& set_maintenance_v3_cbg_tx_crtl_parameters(uint8_t max_num_cbg_per_tb)
   {
     pdu.pdsch_maintenance_v3.max_num_cbg_per_tb = max_num_cbg_per_tb;
-
-    return *this;
-  }
-
-  /// Sets the PDSCH-PTRS Tx power info parameter for the fields of the PDSCH PDU.
-  /// \note These parameters are specified in SCF-222 v4.0 section 3.4.2.2, in table PDSCH PTRS maintenance
-  /// parameters v3.
-  dl_pdsch_pdu_builder& set_ptrs_maintenance_v3_tx_power_info_parameters(optional<float> ptrs_power_offset_profile_sss)
-  {
-    static constexpr int USE_OTHER_FIELDS = std::numeric_limits<int16_t>::min();
-
-    int value = ptrs_power_offset_profile_sss ? static_cast<int>(ptrs_power_offset_profile_sss.value() * 1000)
-                                              : USE_OTHER_FIELDS;
-
-    srsran_assert(value <= std::numeric_limits<int16_t>::max(),
-                  "PDSCH PTRS power offset profile SSS ({}) exceeds the maximum ({}).",
-                  value,
-                  std::numeric_limits<int16_t>::max());
-
-    srsran_assert(value >= std::numeric_limits<int16_t>::min(),
-                  "PDSCH PTRS power offset profile SSS ({}) is under the minimum ({}).",
-                  value,
-                  std::numeric_limits<int16_t>::min());
-
-    pdu.ptrs_maintenance_v3.pdsch_ptrs_power_offset_profile_sss = static_cast<int16_t>(value);
 
     return *this;
   }
@@ -888,43 +719,11 @@ public:
 
   /// Sets the CSI-RS PDU tx power info parameters and returns a reference to the builder.
   /// \note These parameters are specified in SCF-222 v4.0 section 3.4.2.3 in table CSI-RS PDU.
-  dl_csi_rs_pdu_builder& set_tx_power_info_parameters(optional<float>        power_control_offset_profile_nr,
-                                                      nzp_csi_rs_epre_to_ssb ss_profile_nr)
+  dl_csi_rs_pdu_builder& set_tx_power_info_parameters(int                     power_control_offset,
+                                                      power_control_offset_ss power_control_offset_ss)
   {
-    pdu.power_control_offset_ss_profile_nr = ss_profile_nr;
-
-    unsigned value = (power_control_offset_profile_nr)
-                         ? static_cast<unsigned>(power_control_offset_profile_nr.value() + 8U)
-                         : std::numeric_limits<uint8_t>::max();
-
-    srsran_assert(value <= std::numeric_limits<uint8_t>::max(),
-                  "Ratio of PDSCH EPRE to NZP CSI-RS EPRE ({}) exceeds the maximum ({}).",
-                  value,
-                  std::numeric_limits<uint8_t>::max());
-
-    pdu.power_control_offset_profile_nr = static_cast<uint8_t>(value);
-
-    return *this;
-  }
-
-  /// Sets the CSI-RS PDU mainterance v3 tx power info parameters and returns a reference to the builder.
-  /// \note These parameters are specified in SCF-222 v4.0 section 3.4.2.3 in table CSI-RS PDU.
-  dl_csi_rs_pdu_builder& set_maintenance_v3_tx_power_info_parameters(optional<float> profile_sss_dB)
-  {
-    int value =
-        (profile_sss_dB) ? static_cast<int>(profile_sss_dB.value() * 1000.F) : std::numeric_limits<int16_t>::min();
-
-    srsran_assert(value <= std::numeric_limits<int16_t>::max(),
-                  "Ratio of CSI-RS EPRE to SSS EPRE ({}) exceeds the maximum ({}).",
-                  value,
-                  std::numeric_limits<int16_t>::max());
-
-    srsran_assert(value >= std::numeric_limits<int16_t>::min(),
-                  "Ratio of CSI-RS EPRE to SSS EPRE ({}) exceeds the maximum ({}).",
-                  value,
-                  std::numeric_limits<int16_t>::min());
-
-    pdu.csi_rs_maintenance_v3.csi_rs_power_offset_profile_sss = static_cast<int16_t>(value);
+    pdu.power_control_offset_ss_profile_nr = power_control_offset_ss;
+    pdu.power_control_offset_profile_nr    = power_control_offset;
 
     return *this;
   }
@@ -1209,19 +1008,19 @@ public:
 
   /// Adds a CRC.indication PDU to the message and returns a reference to the builder.
   /// \note These parameters are specified in SCF-222 v4.0 section 3.4.8 in table CRC.indication message body.
-  crc_indication_message_builder& add_pdu(uint32_t            handle,
-                                          rnti_t              rnti,
-                                          optional<uint8_t>   rapid,
-                                          uint8_t             harq_id,
-                                          bool                tb_crc_status_ok,
-                                          uint16_t            num_cb,
-                                          span<const uint8_t> cb_crc_status,
-                                          optional<float>     ul_sinr_dB,
-                                          optional<unsigned>  timing_advance_offset,
-                                          optional<int>       timing_advance_offset_in_ns,
-                                          optional<float>     rssi_dB,
-                                          optional<float>     rsrp,
-                                          bool                rsrp_use_dBm = true)
+  crc_indication_message_builder& add_pdu(uint32_t                handle,
+                                          rnti_t                  rnti,
+                                          std::optional<uint8_t>  rapid,
+                                          uint8_t                 harq_id,
+                                          bool                    tb_crc_status_ok,
+                                          uint16_t                num_cb,
+                                          span<const uint8_t>     cb_crc_status,
+                                          std::optional<float>    ul_sinr_dB,
+                                          std::optional<unsigned> timing_advance_offset,
+                                          std::optional<int>      timing_advance_offset_in_ns,
+                                          std::optional<float>    rssi_dB,
+                                          std::optional<float>    rsrp,
+                                          bool                    rsrp_use_dBm = false)
   {
     auto& pdu = msg.pdus.emplace_back();
 
@@ -1284,14 +1083,14 @@ public:
 
   /// Sets the basic parameters of the RACH.indication PDU and returns a reference to the builder.
   /// \note These parameters are specified in SCF-222 v4.0 section 3.4.11 in table RACH.indication message body.
-  rach_indication_pdu_builder& set_basic_params(uint16_t        handle,
-                                                uint8_t         symbol_index,
-                                                uint8_t         slot_index,
-                                                uint8_t         ra_index,
-                                                optional<float> avg_rssi_dB,
-                                                optional<float> rsrp,
-                                                optional<float> avg_snr_dB,
-                                                bool            rsrp_use_dBm = true)
+  rach_indication_pdu_builder& set_basic_params(uint16_t             handle,
+                                                uint8_t              symbol_index,
+                                                uint8_t              slot_index,
+                                                uint8_t              ra_index,
+                                                std::optional<float> avg_rssi_dB,
+                                                std::optional<float> rsrp,
+                                                std::optional<float> avg_snr_dB,
+                                                bool                 rsrp_use_dBm = false)
 
   {
     pdu.handle       = handle;
@@ -1328,11 +1127,11 @@ public:
   /// \note These parameters are specified in SCF-222 v4.0 section 3.4.11 in table RACH.indication message body.
   /// \note Units for timing advace offset parameter are specified in SCF-222 v4.0 section 3.4.11 in table
   /// RACH.indication message body, and this function expect this units.
-  rach_indication_pdu_builder& add_preamble(unsigned           preamble_index,
-                                            optional<unsigned> timing_advance_offset,
-                                            optional<uint32_t> timing_advance_offset_ns,
-                                            optional<float>    preamble_power,
-                                            optional<float>    preamble_snr)
+  rach_indication_pdu_builder& add_preamble(unsigned                preamble_index,
+                                            std::optional<unsigned> timing_advance_offset,
+                                            std::optional<uint32_t> timing_advance_offset_ns,
+                                            std::optional<float>    preamble_power,
+                                            std::optional<float>    preamble_snr)
 
   {
     auto& preamble = pdu.preambles.emplace_back();
@@ -1382,14 +1181,14 @@ public:
 
   /// Adds a PDU to the RACH.indication message and returns a reference to the builder.
   /// \note These parameters are specified in SCF-222 v4.0 section 3.4.11 in table RACH.indication message body.
-  rach_indication_pdu_builder add_pdu(uint16_t        handle,
-                                      uint8_t         symbol_index,
-                                      uint8_t         slot_index,
-                                      uint8_t         ra_index,
-                                      optional<float> avg_rssi,
-                                      optional<float> rsrp,
-                                      optional<float> avg_snr,
-                                      bool            rsrp_use_dBm = true)
+  rach_indication_pdu_builder add_pdu(uint16_t             handle,
+                                      uint8_t              symbol_index,
+                                      uint8_t              slot_index,
+                                      uint8_t              ra_index,
+                                      std::optional<float> avg_rssi,
+                                      std::optional<float> rsrp,
+                                      std::optional<float> avg_snr,
+                                      bool                 rsrp_use_dBm = false)
   {
     auto& pdu = msg.pdus.emplace_back();
 
@@ -1421,12 +1220,12 @@ public:
 
   /// \brief Sets the UCI PUSCH PDU metrics parameters and returns a reference to the builder.
   /// \note These parameters are specified in SCF-222 v4.0 Section 3.4.9.1 in Table UCI PUSCH PDU.
-  uci_pusch_pdu_builder& set_metrics_parameters(optional<float>    ul_sinr_metric,
-                                                optional<unsigned> timing_advance_offset,
-                                                optional<int>      timing_advance_offset_ns,
-                                                optional<float>    rssi,
-                                                optional<float>    rsrp,
-                                                bool               rsrp_use_dBm = true)
+  uci_pusch_pdu_builder& set_metrics_parameters(std::optional<float>    ul_sinr_metric,
+                                                std::optional<unsigned> timing_advance_offset,
+                                                std::optional<int>      timing_advance_offset_ns,
+                                                std::optional<float>    rssi,
+                                                std::optional<float>    rsrp,
+                                                bool                    rsrp_use_dBm = false)
   {
     pdu.timing_advance_offset    = (timing_advance_offset) ? static_cast<uint16_t>(timing_advance_offset.value())
                                                            : std::numeric_limits<uint16_t>::max();
@@ -1558,12 +1357,12 @@ public:
 
   /// \brief Sets the UCI PUCCH PDU Format 0 and Format 1 metrics parameters and returns a reference to the builder.
   /// \note These parameters are specified in SCF-222 v4.0 Section 3.4.9.2 in Table UCI PUCCH Format 0 or Format 1 PDU.
-  uci_pucch_pdu_format_0_1_builder& set_metrics_parameters(optional<float>    ul_sinr_metric,
-                                                           optional<unsigned> timing_advance_offset,
-                                                           optional<int>      timing_advance_offset_ns,
-                                                           optional<float>    rssi,
-                                                           optional<float>    rsrp,
-                                                           bool               rsrp_use_dBm = true)
+  uci_pucch_pdu_format_0_1_builder& set_metrics_parameters(std::optional<float>    ul_sinr_metric,
+                                                           std::optional<unsigned> timing_advance_offset,
+                                                           std::optional<int>      timing_advance_offset_ns,
+                                                           std::optional<float>    rssi,
+                                                           std::optional<float>    rsrp,
+                                                           bool                    rsrp_use_dBm = false)
   {
     pdu.timing_advance_offset    = (timing_advance_offset) ? static_cast<uint16_t>(timing_advance_offset.value())
                                                            : std::numeric_limits<uint16_t>::max();
@@ -1613,7 +1412,7 @@ public:
 
   /// \brief Sets the SR PDU parameters and returns a reference to the builder.
   /// \note These parameters are specified in SCF-222 v4.0 Section 3.4.9.4 in Table SR PDU for Format 0 or Format 1 PDU.
-  uci_pucch_pdu_format_0_1_builder& set_sr_parameters(bool detected, optional<unsigned> confidence_level)
+  uci_pucch_pdu_format_0_1_builder& set_sr_parameters(bool detected, std::optional<unsigned> confidence_level)
   {
     pdu.pdu_bitmap.set(uci_pucch_pdu_format_0_1::SR_BIT);
 
@@ -1629,7 +1428,7 @@ public:
   /// \brief Sets the HARQ PDU parameters and returns a reference to the builder.
   /// \note These parameters are specified in SCF-222 v4.0 Section 3.4.9.2 in Table HARQ PDU for Format 0 or Format 1
   /// PDU.
-  uci_pucch_pdu_format_0_1_builder& set_harq_parameters(optional<unsigned>                         confidence_level,
+  uci_pucch_pdu_format_0_1_builder& set_harq_parameters(std::optional<unsigned>                    confidence_level,
                                                         span<const uci_pucch_f0_or_f1_harq_values> value)
   {
     pdu.pdu_bitmap.set(uci_pucch_pdu_format_0_1::HARQ_BIT);
@@ -1680,12 +1479,12 @@ public:
   /// builder.
   /// \note These parameters are specified in SCF-222 v4.0 Section 3.4.9.3 in Table UCI PUCCH Format 2, Format
   /// 3 or Format 4 PDU.
-  uci_pucch_pdu_format_2_3_4_builder& set_metrics_parameters(optional<float>    ul_sinr_metric,
-                                                             optional<unsigned> timing_advance_offset,
-                                                             optional<int>      timing_advance_offset_ns,
-                                                             optional<float>    rssi,
-                                                             optional<float>    rsrp,
-                                                             bool               rsrp_use_dBm = true)
+  uci_pucch_pdu_format_2_3_4_builder& set_metrics_parameters(std::optional<float>    ul_sinr_metric,
+                                                             std::optional<unsigned> timing_advance_offset,
+                                                             std::optional<int>      timing_advance_offset_ns,
+                                                             std::optional<float>    rssi,
+                                                             std::optional<float>    rsrp,
+                                                             bool                    rsrp_use_dBm = false)
   {
     pdu.timing_advance_offset    = (timing_advance_offset) ? static_cast<uint16_t>(timing_advance_offset.value())
                                                            : std::numeric_limits<uint16_t>::max();
@@ -1800,6 +1599,80 @@ public:
     csi.payload             = payload;
 
     return *this;
+  }
+};
+
+/// SRS indication PDU builder that helps fill in the parameters specified in SCF-222 v4.0 section 3.4.10.
+class srs_indication_pdu_builder
+{
+  srs_indication_pdu& pdu;
+
+public:
+  explicit srs_indication_pdu_builder(srs_indication_pdu& pdu_) : pdu(pdu_) {}
+
+  /// \brief Sets the SRS indication PDU basic parameters and returns a reference to the builder.
+  /// \note These parameters are specified in SCF-222 v4.0 Section 3.4.10.
+  srs_indication_pdu_builder& set_basic_parameters(uint32_t handle, rnti_t rnti)
+  {
+    pdu.handle = handle;
+    pdu.rnti   = rnti;
+
+    return *this;
+  }
+
+  /// \brief Sets the SRS indication PDU metrics parameters and returns a reference to the builder.
+  /// \note These parameters are specified in SCF-222 v4.0 Section 3.4.10.
+  srs_indication_pdu_builder& set_metrics_parameters(std::optional<unsigned> timing_advance_offset,
+                                                     std::optional<int>      timing_advance_offset_ns)
+  {
+    pdu.timing_advance_offset    = (timing_advance_offset) ? static_cast<uint16_t>(timing_advance_offset.value())
+                                                           : std::numeric_limits<uint16_t>::max();
+    pdu.timing_advance_offset_ns = (timing_advance_offset_ns) ? static_cast<int16_t>(timing_advance_offset_ns.value())
+                                                              : std::numeric_limits<int16_t>::min();
+
+    return *this;
+  }
+
+  /// \brief Sets the SRS indication PDU normalized channel I/Q matrix and returns a reference to the builder.
+  /// \note These parameters are specified in SCF-222 v4.0 Section 3.4.10 Table 3-132.
+  srs_indication_pdu_builder& set_codebook_report_matrix(const srs_channel_matrix& matrix)
+  {
+    pdu.srs_usage   = srs_usage_mode::codebook;
+    pdu.report_type = 1;
+    pdu.matrix      = matrix;
+
+    return *this;
+  }
+};
+
+/// SRS.indication message builder that helps to fill in the parameters specified in SCF-222 v4.0 Section 3.4.10.
+class srs_indication_message_builder
+{
+  srs_indication_message& msg;
+
+public:
+  explicit srs_indication_message_builder(srs_indication_message& msg_) : msg(msg_) {}
+
+  /// \brief Sets the \e SRS.indication basic parameters and returns a reference to the builder.
+  /// \note These parameters are specified in SCF-222 v4.0 Section 3.4.10 in table SRS.indication message body.
+  srs_indication_message_builder& set_basic_parameters(uint16_t sfn, uint16_t slot)
+  {
+    msg.sfn            = sfn;
+    msg.slot           = slot;
+    msg.control_length = 0;
+
+    return *this;
+  }
+
+  /// Adds a SRS PDU to the \e SRS.indication message and returns a SRS PDU builder.
+  srs_indication_pdu_builder add_srs_pdu(uint32_t handle, rnti_t rnti)
+  {
+    auto& pdu = msg.pdus.emplace_back();
+
+    srs_indication_pdu_builder builder(pdu);
+    builder.set_basic_parameters(handle, rnti);
+
+    return builder;
   }
 };
 
@@ -2015,7 +1888,7 @@ public:
   /// Adds a PDU to the message and returns a reference to the builder.
   /// \note These parameters are specified in SCF-222 v4.0 section 3.4.7 in table Rx_Data.indication message body.
   rx_data_indication_message_builder&
-  add_custom_pdu(uint32_t handle, rnti_t rnti, optional<unsigned> rapid, uint8_t harq_id, span<const uint8_t> data)
+  add_custom_pdu(uint32_t handle, rnti_t rnti, std::optional<unsigned> rapid, uint8_t harq_id, span<const uint8_t> data)
   {
     auto& pdu = msg.pdus.emplace_back();
 
@@ -2068,7 +1941,7 @@ public:
                                                             prach_config_scope_type prach_config_scope,
                                                             uint16_t                prach_res_config_index,
                                                             uint8_t                 num_fd_ra,
-                                                            optional<uint8_t>       start_preamble_index,
+                                                            std::optional<uint8_t>  start_preamble_index,
                                                             uint8_t                 num_preambles_indices)
   {
     auto& v3                  = pdu.maintenance_v3;
@@ -2239,8 +2112,8 @@ public:
 
   /// Sets the PUCCH PDU maintenance v3 basic parameters and returns a reference to the builder.
   /// \note These parameters are specified in SCF-222 v4.0 section 3.4.3.3 in table PUCCH basic extension for FAPIv3.
-  ul_pucch_pdu_builder& set_maintenance_v3_basic_parameters(optional<unsigned> max_code_rate,
-                                                            optional<unsigned> ul_bwp_id)
+  ul_pucch_pdu_builder& set_maintenance_v3_basic_parameters(std::optional<unsigned> max_code_rate,
+                                                            std::optional<unsigned> ul_bwp_id)
   {
     pdu.pucch_maintenance_v3.max_code_rate =
         (max_code_rate) ? static_cast<unsigned>(max_code_rate.value()) : std::numeric_limits<uint8_t>::max();

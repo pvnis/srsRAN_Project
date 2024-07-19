@@ -38,12 +38,20 @@ public:
   e2sm_rc_control_action_du_executor_base(du_configurator& du_configurator_, uint32_t action_id_);
   virtual ~e2sm_rc_control_action_du_executor_base() = default;
 
-  bool fill_ran_function_description(asn1::e2sm_rc::ran_function_definition_ctrl_action_item_s& action_item);
+  bool fill_ran_function_description(asn1::e2sm::ran_function_definition_ctrl_action_item_s& action_item);
 
   /// e2sm_control_request_executor functions.
   uint32_t                              get_action_id() override;
   bool                                  ric_control_action_supported(const e2sm_ric_control_request& req) override = 0;
   async_task<e2sm_ric_control_response> execute_ric_control_action(const e2sm_ric_control_request& req) override   = 0;
+  virtual void parse_action_ran_parameter_value(const asn1::e2sm::ran_param_value_type_c& ran_p,
+                                                uint64_t                                  ran_param_id,
+                                                uint64_t                                  ue_id,
+                                                du_mac_sched_control_config&              ctrl_cfg)                             = 0;
+  void         parse_ran_parameter_value(const asn1::e2sm::ran_param_value_type_c& ran_p,
+                                         uint64_t                                  ran_param_id,
+                                         uint64_t                                  ue_id,
+                                         du_mac_sched_control_config&              ctrl_cfg);
   async_task<e2sm_ric_control_response> return_ctrl_failure(const e2sm_ric_control_request& req);
 
 protected:
@@ -63,6 +71,10 @@ public:
   /// e2sm_control_request_executor functions.
   bool                                  ric_control_action_supported(const e2sm_ric_control_request& req) override;
   async_task<e2sm_ric_control_response> execute_ric_control_action(const e2sm_ric_control_request& req) override;
+  void parse_action_ran_parameter_value(const asn1::e2sm::ran_param_value_type_c& ran_p,
+                                        uint64_t                                  ran_param_id,
+                                        uint64_t                                  ue_id,
+                                        du_mac_sched_control_config&              ctrl_cfg) override;
 
 private:
   du_mac_sched_control_config convert_to_du_config_request(const e2sm_ric_control_request& e2sm_req_);

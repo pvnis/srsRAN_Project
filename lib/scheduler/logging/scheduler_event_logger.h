@@ -48,14 +48,18 @@ public:
     du_ue_index_t ue_index;
     rnti_t        rnti;
   };
+  struct ue_cfg_applied_event {
+    du_ue_index_t ue_index;
+    rnti_t        rnti;
+  };
   struct crc_event {
-    du_ue_index_t   ue_index;
-    rnti_t          rnti;
-    du_cell_index_t cell_index;
-    slot_point      sl_rx;
-    harq_id_t       h_id;
-    bool            crc;
-    optional<float> ul_sinr_db;
+    du_ue_index_t        ue_index;
+    rnti_t               rnti;
+    du_cell_index_t      cell_index;
+    slot_point           sl_rx;
+    harq_id_t            h_id;
+    bool                 crc;
+    std::optional<float> ul_sinr_db;
   };
   struct harq_ack_event {
     du_ue_index_t              ue_index;
@@ -83,22 +87,18 @@ public:
     units::bytes           tot_ul_pending_bytes;
   };
   struct phr_event {
-    du_ue_index_t              ue_index;
-    rnti_t                     rnti;
-    du_cell_index_t            cell_index;
-    ph_db_range                ph;
-    optional<p_cmax_dbm_range> p_cmax;
+    du_ue_index_t                   ue_index;
+    rnti_t                          rnti;
+    du_cell_index_t                 cell_index;
+    ph_db_range                     ph;
+    std::optional<p_cmax_dbm_range> p_cmax;
   };
   struct error_indication_event {
     slot_point                            sl_tx;
     scheduler_slot_handler::error_outcome outcome;
   };
 
-  scheduler_event_logger() :
-    logger(srslog::fetch_basic_logger("SCHED")),
-    mode(logger.debug.enabled() ? mode_t::debug : (logger.info.enabled() ? mode_t::info : mode_t::none))
-  {
-  }
+  scheduler_event_logger(du_cell_index_t cell_index_, pci_t pci_);
 
   void log()
   {
@@ -121,9 +121,6 @@ public:
 
 private:
   enum mode_t { none, info, debug };
-  srslog::basic_logger& logger;
-
-  mode_t mode = none;
 
   const char* separator() const;
 
@@ -135,6 +132,7 @@ private:
   void enqueue_impl(const ue_creation_event& ue_request);
   void enqueue_impl(const ue_reconf_event& ue_request);
   void enqueue_impl(const sched_ue_delete_message& ue_request);
+  void enqueue_impl(const ue_cfg_applied_event& ue_cfg_applied);
 
   void enqueue_impl(const error_indication_event& err_ind);
 
@@ -146,6 +144,14 @@ private:
   void enqueue_impl(const dl_mac_ce_indication& mac_ce);
   void enqueue_impl(const dl_buffer_state_indication_message& bs);
   void enqueue_impl(const phr_event& phr_ev);
+
+  du_cell_index_t       cell_index;
+  pci_t                 pci;
+  srslog::basic_logger& logger;
+  mode_t                mode = none;
+
+  // Mapping of cell indexes to pcis.
+  std::array<pci_t, MAX_NOF_DU_CELLS> cell_pcis{INVALID_PCI};
 
   fmt::memory_buffer fmtbuf;
 };

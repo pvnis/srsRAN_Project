@@ -33,7 +33,10 @@ using namespace srsran;
 
 namespace {
 
-const pusch_processor::pdu_t base_pdu = {nullopt,
+/// Maximum number of layers the PUSCH processor supports.
+static constexpr unsigned max_supported_nof_layers = 2;
+
+const pusch_processor::pdu_t base_pdu = {std::nullopt,
                                          {0, 9},
                                          8323,
                                          25,
@@ -44,7 +47,7 @@ const pusch_processor::pdu_t base_pdu = {nullopt,
                                          {0, 1, uci_part2_size_description(1), 1, 20, 6.25, 6.25},
                                          935,
                                          1,
-                                         {0},
+                                         {0, 1, 2, 3},
                                          {0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0},
                                          dmrs_type::TYPE1,
                                          35840,
@@ -53,7 +56,7 @@ const pusch_processor::pdu_t base_pdu = {nullopt,
                                          rb_allocation::make_type1(15, 1),
                                          0,
                                          14,
-                                         ldpc::MAX_CODEBLOCK_SIZE / 8};
+                                         units::bytes(ldpc::MAX_CODEBLOCK_SIZE / 8)};
 
 struct test_case_t {
   std::function<pusch_processor::pdu_t()> get_pdu;
@@ -75,16 +78,16 @@ const std::vector<test_case_t> pusch_processor_validator_test_data = {
      R"(The sum of the BWP start \(i\.e\., 0\) and size \(i\.e\., 276\) exceeds the maximum grid size \(i\.e\., 275 PRB\)\.)"},
     {[] {
        pusch_processor::pdu_t pdu = base_pdu;
-       pdu.nof_tx_layers          = 2;
+       pdu.nof_tx_layers          = max_supported_nof_layers + 1;
        return pdu;
      },
-     R"(The number of transmit layers \(i\.e\., 2\) exceeds the maximum number of transmission layers \(i\.e\., 1\)\.)"},
+     R"(The number of transmit layers \(i\.e\., 3\) is out of the range \[1\.\.2\]\.)"},
     {[] {
        pusch_processor::pdu_t pdu = base_pdu;
-       pdu.rx_ports               = {0, 1};
+       pdu.rx_ports.emplace_back(pusch_constants::MAX_NOF_RX_PORTS);
        return pdu;
      },
-     R"(The number of receive ports \(i\.e\., 2\) exceeds the maximum number of receive ports \(i\.e\., 1\)\.)"},
+     R"(The number of receive ports \(i\.e\., 5\) exceeds the maximum number of receive ports \(i\.e\., 4\)\.)"},
     {[] {
        pusch_processor::pdu_t pdu = base_pdu;
        pdu.bwp_size_rb            = 1;
@@ -150,6 +153,12 @@ const std::vector<test_case_t> pusch_processor_validator_test_data = {
      R"(Only two CDM groups without data are currently supported\.)"},
     {[] {
        pusch_processor::pdu_t pdu = base_pdu;
+       pdu.tbs_lbrm               = units::bytes(0);
+       return pdu;
+     },
+     R"(Invalid LBRM size \(0 bytes\)\.)"},
+    {[] {
+       pusch_processor::pdu_t pdu = base_pdu;
        pdu.dc_position            = MAX_RB * NRE;
        return pdu;
      },
@@ -202,9 +211,13 @@ protected:
     }
     ASSERT_NE(dft_factory, nullptr) << "Cannot create DFT factory.";
 
+    std::shared_ptr<time_alignment_estimator_factory> ta_estimator_factory =
+        create_time_alignment_estimator_dft_factory(dft_factory);
+    ASSERT_NE(ta_estimator_factory, nullptr) << "Cannot create TA estimator factory.";
+
     // Create port channel estimator factory.
     std::shared_ptr<port_channel_estimator_factory> port_chan_estimator_factory =
-        create_port_channel_estimator_factory_sw(dft_factory);
+        create_port_channel_estimator_factory_sw(ta_estimator_factory);
     ASSERT_NE(port_chan_estimator_factory, nullptr);
 
     // Create DM-RS for PUSCH channel estimator.
@@ -213,7 +226,7 @@ protected:
     ASSERT_NE(dmrs_pusch_chan_estimator_factory, nullptr);
 
     // Create channel equalizer factory.
-    std::shared_ptr<channel_equalizer_factory> eq_factory = create_channel_equalizer_factory_zf();
+    std::shared_ptr<channel_equalizer_factory> eq_factory = create_channel_equalizer_generic_factory();
     ASSERT_NE(eq_factory, nullptr);
 
     // Create PUSCH demodulator factory.
@@ -254,8 +267,8 @@ protected:
     pusch_proc_factory_config.uci_dec_factory                      = uci_dec_factory;
     pusch_proc_factory_config.ch_estimate_dimensions.nof_prb       = MAX_RB;
     pusch_proc_factory_config.ch_estimate_dimensions.nof_symbols   = MAX_NSYMB_PER_SLOT;
-    pusch_proc_factory_config.ch_estimate_dimensions.nof_rx_ports  = 1;
-    pusch_proc_factory_config.ch_estimate_dimensions.nof_tx_layers = 1;
+    pusch_proc_factory_config.ch_estimate_dimensions.nof_rx_ports  = pusch_constants::MAX_NOF_RX_PORTS;
+    pusch_proc_factory_config.ch_estimate_dimensions.nof_tx_layers = max_supported_nof_layers;
     pusch_proc_factory_config.max_nof_concurrent_threads           = 1;
     std::shared_ptr<pusch_processor_factory> pusch_proc_factory =
         create_pusch_processor_factory_sw(pusch_proc_factory_config);

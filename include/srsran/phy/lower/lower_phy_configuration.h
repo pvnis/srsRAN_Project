@@ -25,6 +25,7 @@
 #include "srsran/gateways/baseband/baseband_gateway.h"
 #include "srsran/phy/lower/amplitude_controller/amplitude_controller_factories.h"
 #include "srsran/phy/lower/lower_phy_error_notifier.h"
+#include "srsran/phy/lower/lower_phy_metrics_notifier.h"
 #include "srsran/phy/lower/lower_phy_rx_symbol_notifier.h"
 #include "srsran/phy/lower/lower_phy_timing_notifier.h"
 #include "srsran/phy/lower/modulation/ofdm_demodulator.h"
@@ -34,6 +35,7 @@
 #include "srsran/ran/cyclic_prefix.h"
 #include "srsran/ran/n_ta_offset.h"
 #include "srsran/ran/subcarrier_spacing.h"
+#include "srsran/srslog/srslog.h"
 #include "srsran/support/executors/task_executor.h"
 
 namespace srsran {
@@ -121,6 +123,8 @@ struct lower_phy_configuration {
   lower_phy_timing_notifier* timing_notifier;
   /// Provides the error handler to notify runtime errors.
   lower_phy_error_notifier* error_notifier;
+  /// Provides the metrics handler to notify runtime measurements.
+  lower_phy_metrics_notifier* metric_notifier;
   /// Receive task executor.
   task_executor* rx_task_executor;
   /// Transmit task executor.
@@ -132,6 +136,24 @@ struct lower_phy_configuration {
   /// PRACH asynchronous task executor.
   task_executor* prach_async_executor;
 };
+
+/// Converts a string into a baseband buffer size policy.
+inline lower_phy_baseband_buffer_size_policy to_buffer_size_policy(const std::string& str)
+{
+  if (str == "single-packet") {
+    return lower_phy_baseband_buffer_size_policy::single_packet;
+  }
+  if (str == "half-slot") {
+    return lower_phy_baseband_buffer_size_policy::half_slot;
+  }
+  if (str == "slot") {
+    return lower_phy_baseband_buffer_size_policy::slot;
+  }
+  if (str == "optimal-slot") {
+    return lower_phy_baseband_buffer_size_policy::optimal_slot;
+  }
+  report_error("Invalid lower PHY baseband buffer size policy '{}'.", str);
+}
 
 /// Returns true if the given lower PHY configuration is valid, otherwise false.
 inline bool is_valid_lower_phy_config(const lower_phy_configuration& config)

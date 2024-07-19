@@ -42,7 +42,7 @@ srsran::srs_du::make_sched_cell_config_req(du_cell_index_t          cell_index,
 
   sched_cell_configuration_request_message sched_req{};
   sched_req.cell_index           = cell_index;
-  sched_req.cell_group_index     = (du_cell_group_index_t)0;
+  sched_req.cell_group_index     = (du_cell_group_index_t)cell_index; // No CA by default.
   sched_req.pci                  = du_cfg.pci;
   sched_req.dl_carrier           = du_cfg.dl_carrier;
   sched_req.ul_carrier           = du_cfg.ul_carrier;
@@ -68,6 +68,8 @@ srsran::srs_du::make_sched_cell_config_req(du_cell_index_t          cell_index,
       sched_req.si_scheduling->si_messages[i].period_radio_frames =
           du_cfg.si_config->si_sched_info[i].si_period_radio_frames;
       sched_req.si_scheduling->si_messages[i].msg_len = si_payload_sizes[i + 1];
+      sched_req.si_scheduling->si_messages[i].si_window_position =
+          du_cfg.si_config->si_sched_info[i].si_window_position;
     }
   }
 
@@ -110,6 +112,11 @@ sched_ue_config_request srsran::srs_du::create_scheduler_ue_config_request(const
     sched_lc_ch.lc_sr_mask                = bearer.second->mac_cfg.lc_sr_mask;
     sched_lc_ch.lc_sr_delay_timer_applied = bearer.second->mac_cfg.lc_sr_delay_applied;
     sched_lc_ch.sr_id.emplace(bearer.second->mac_cfg.sr_id);
+
+    sched_cfg.drb_info_list.emplace_back(sched_drb_info{.lcid         = bearer.second->lcid,
+                                                        .s_nssai      = bearer.second->s_nssai,
+                                                        .qos_info     = bearer.second->qos_info,
+                                                        .gbr_qos_info = bearer.second->gbr_qos_info});
   }
 
   return sched_cfg;

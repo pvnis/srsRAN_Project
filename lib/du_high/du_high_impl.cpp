@@ -24,12 +24,12 @@
 #include "adapters/adapters.h"
 #include "adapters/du_high_adapter_factories.h"
 #include "adapters/f1ap_adapters.h"
+#include "adapters/f1ap_test_mode_adapter.h"
 #include "du_high_executor_strategies.h"
 #include "srsran/du_manager/du_manager_factory.h"
 #include "srsran/e2/e2.h"
 #include "srsran/e2/e2_factory.h"
 #include "srsran/f1ap/du/f1ap_du_factory.h"
-#include "srsran/mac/mac_factory.h"
 #include "srsran/support/executors/task_redispatcher.h"
 #include "srsran/support/timers.h"
 
@@ -100,10 +100,10 @@ private:
   srslog::basic_logger&             logger;
 };
 
-class scheduler_ue_metrics_null_notifier final : public scheduler_ue_metrics_notifier
+class scheduler_ue_metrics_null_notifier final : public scheduler_metrics_notifier
 {
 public:
-  void report_metrics(span<const scheduler_ue_metrics> ue_metrics) override
+  void report_metrics(const scheduler_cell_metrics& metrics) override
   {
     // do nothing.
   }
@@ -128,13 +128,19 @@ du_high_impl::du_high_impl(const du_high_configuration& config_) :
                                     cfg.sched_cfg,
                                     cfg.sched_ue_metrics_notifier ? *cfg.sched_ue_metrics_notifier : *metrics_notifier},
                          cfg.test_cfg);
-  f1ap       = create_f1ap(*cfg.f1c_client,
-                     adapters->f1_to_du_notifier,
-                     cfg.exec_mapper->du_control_executor(),
-                     cfg.exec_mapper->ue_mapper(),
-                     adapters->f1ap_paging_notifier);
+  f1ap = create_du_high_f1ap(*cfg.f1c_client,
+                             adapters->f1_to_du_notifier,
+                             cfg.exec_mapper->du_control_executor(),
+                             cfg.exec_mapper->ue_mapper(),
+                             adapters->f1ap_paging_notifier,
+                             cfg.test_cfg);
+
+  expected<std::string> f1u_bind_string = config_.f1u_gw->get_du_bind_address(cfg.gnb_du_id);
+  assert(f1u_bind_string.has_value());
+  transport_layer_address f1u_bind_addr = transport_layer_address::create_from_string(f1u_bind_string.value());
+
   du_manager = create_du_manager(du_manager_params{
-      {cfg.gnb_du_name, cfg.gnb_du_id, 1, cfg.du_bind_addr, cfg.cells, cfg.srbs, cfg.qos},
+      {cfg.gnb_du_name, cfg.gnb_du_id, 1, f1u_bind_addr, cfg.cells, cfg.srbs, cfg.qos},
       {timers, cfg.exec_mapper->du_control_executor(), cfg.exec_mapper->ue_mapper(), cfg.exec_mapper->cell_mapper()},
       {*f1ap, *f1ap},
       {*config_.f1u_gw},
@@ -177,14 +183,16 @@ void du_high_impl::start()
   // If test mode is enabled, create a test-mode UE by injecting a Msg3.
   if (cfg.test_cfg.test_ue.has_value()) {
     // Push an UL-CCCH message that will trigger the creation of a UE for testing purposes.
-    for (auto ue_num = 0; ue_num < cfg.test_cfg.test_ue->nof_ues; ++ue_num) {
-      mac->get_pdu_handler().handle_rx_data_indication(
-          mac_rx_data_indication{slot_point{0, 0},
-                                 to_du_cell_index(0),
-                                 {mac_rx_pdu{to_rnti(to_value(cfg.test_cfg.test_ue->rnti) + ue_num),
-                                             0,
-                                             0,
-                                             {0x34, 0x1e, 0x4f, 0xc0, 0x4f, 0xa6, 0x06, 0x3f, 0x00, 0x00, 0x00}}}});
+    for (unsigned ue_num = 0, nof_ues = cfg.test_cfg.test_ue->nof_ues; ue_num != nof_ues; ++ue_num) {
+      auto rx_buf = byte_buffer::create({0x34, 0x1e, 0x4f, 0xc0, 0x4f, 0xa6, 0x06, 0x3f, 0x00, 0x00, 0x00});
+      if (not rx_buf.has_value()) {
+        logger.warning("Unable to allocate byte_buffer");
+        continue;
+      }
+      mac->get_pdu_handler().handle_rx_data_indication(mac_rx_data_indication{
+          slot_point{0, 0},
+          to_du_cell_index(0),
+          {mac_rx_pdu{to_rnti(to_value(cfg.test_cfg.test_ue->rnti) + ue_num), 0, 0, std::move(rx_buf.value())}}});
     }
   }
 }

@@ -44,7 +44,7 @@ void bearer_context_modification_procedure::operator()(
   logger.log_debug("\"{}\" initialized", name());
 
   // Subscribe to respective publisher to receive BEARER CONTEXT MODIFICATION RESPONSE/FAILURE message.
-  transaction_sink.subscribe_to(ev_mng.context_modification_outcome);
+  transaction_sink.subscribe_to(ev_mng.context_modification_outcome, std::chrono::milliseconds{1000});
 
   // Send command to CU-UP.
   send_bearer_context_modification_request();
@@ -58,12 +58,6 @@ void bearer_context_modification_procedure::operator()(
 
 void bearer_context_modification_procedure::send_bearer_context_modification_request()
 {
-  if (logger.get_basic_logger().debug.enabled()) {
-    asn1::json_writer js;
-    request.pdu.to_json(js);
-    logger.log_debug("Containerized BearerContextModificationRequest: {}", js.to_string());
-  }
-
   // send UE context modification request message
   e1ap_notifier.on_new_message(request);
 }
@@ -75,31 +69,22 @@ bearer_context_modification_procedure::create_bearer_context_modification_result
 
   if (transaction_sink.successful()) {
     const asn1::e1ap::bearer_context_mod_resp_s& resp = transaction_sink.response();
-    logger.log_debug("Received BearerContextModificationResponse");
-    if (logger.get_basic_logger().debug.enabled()) {
-      asn1::json_writer js;
-      resp.to_json(js);
-      logger.log_debug("Containerized BearerContextModificationResponse: {}", js.to_string());
-    }
     fill_e1ap_bearer_context_modification_response(res, resp);
 
     logger.log_debug("\"{}\" finalized", name());
   } else if (transaction_sink.failed()) {
     const asn1::e1ap::bearer_context_mod_fail_s& fail = transaction_sink.failure();
-    logger.log_debug("Received BearerContextModificationFailure cause={}", get_cause_str(fail->cause));
-    if (logger.get_basic_logger().debug.enabled()) {
-      asn1::json_writer js;
-      fail.to_json(js);
-      logger.log_debug("Containerized BearerContextModificationFailure: {}", js.to_string());
-    }
     fill_e1ap_bearer_context_modification_response(res, fail);
 
-    logger.log_error("\"{}\" failed", name());
+    logger.log_warning("\"{}\" failed", name());
   } else {
-    logger.log_warning("BearerContextModificationResponse timeout");
     res.success = false;
 
-    logger.log_error("\"{}\" failed", name());
+    if (transaction_sink.timeout_expired()) {
+      logger.log_warning("BearerContextModificationResponse timeout");
+    } else {
+      logger.log_warning("BearerContextModificationResponse cancelled");
+    }
   }
   return res;
 }

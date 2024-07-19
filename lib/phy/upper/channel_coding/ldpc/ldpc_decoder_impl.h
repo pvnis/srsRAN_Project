@@ -48,10 +48,10 @@ public:
   ldpc_decoder_impl() = default;
 
   // See interface for the documentation.
-  optional<unsigned> decode(bit_buffer&                      output,
-                            span<const log_likelihood_ratio> input,
-                            crc_calculator*                  crc,
-                            const configuration&             cfg) override;
+  std::optional<unsigned> decode(bit_buffer&                      output,
+                                 span<const log_likelihood_ratio> input,
+                                 crc_calculator*                  crc,
+                                 const configuration&             cfg) override;
 
 private:
   /// Initializes the decoder inner variables.
@@ -157,8 +157,11 @@ private:
                                  span<const log_likelihood_ratio> this_var_to_check,
                                  span<const log_likelihood_ratio> this_check_to_var) = 0;
 
-  /// Converts soft bits into hard bits and returns the decoded message.
-  virtual void get_hard_bits(bit_buffer& out) = 0;
+  /// \brief Converts soft bits into hard bits and returns the decoded message.
+  ///
+  /// \param[out] out Destination bit buffer.
+  /// \return True if none of the soft bits is zero. Otherwise, false.
+  virtual bool get_hard_bits(bit_buffer& out) = 0;
 
   /// \brief Helper function for \ref update_variable_to_check_messages().
   ///

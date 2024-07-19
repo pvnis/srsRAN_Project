@@ -24,12 +24,19 @@
 
 #include "ngap_asn1_converters.h"
 #include "srsran/asn1/ngap/common.h"
+#include "srsran/asn1/ngap/ngap_pdu_contents.h"
 #include "srsran/ngap/ngap.h"
 #include "srsran/ngap/ngap_message.h"
 #include "srsran/ngap/ngap_types.h"
 
 namespace srsran {
 namespace srs_cu_cp {
+
+struct error_indication_request_t {
+  ngap_cause_t               cause;
+  std::optional<ran_ue_id_t> ran_ue_id;
+  std::optional<amf_ue_id_t> amf_ue_id;
+};
 
 /// \brief Send an Error Indication message to the AMF.
 /// \param[in] ngap_notifier The message notifier to send the message to the AMF.
@@ -38,11 +45,11 @@ namespace srs_cu_cp {
 /// \param[in] amf_ue_id The AMF UE ID (optional).
 /// \param[in] cause The cause of the Error Indication (optional).
 
-inline void send_error_indication(ngap_message_notifier& ngap_notifier,
-                                  srslog::basic_logger&  logger,
-                                  optional<ran_ue_id_t>  ran_ue_id = {},
-                                  optional<amf_ue_id_t>  amf_ue_id = {},
-                                  optional<cause_t>      cause     = {})
+inline void send_error_indication(ngap_message_notifier&      ngap_notifier,
+                                  srslog::basic_logger&       logger,
+                                  std::optional<ran_ue_id_t>  ran_ue_id = {},
+                                  std::optional<amf_ue_id_t>  amf_ue_id = {},
+                                  std::optional<ngap_cause_t> cause     = {})
 {
   ngap_message ngap_msg = {};
   ngap_msg.pdu.set_init_msg();
@@ -70,8 +77,8 @@ inline void send_error_indication(ngap_message_notifier& ngap_notifier,
 
   // Forward message to AMF
   logger.info("{}{}{}Sending ErrorIndication",
-              error_ind->ran_ue_ngap_id_present ? fmt::format(" ran_ue_id={}", error_ind->ran_ue_ngap_id) : "",
-              error_ind->amf_ue_ngap_id_present ? fmt::format(" amf_ue_id={}", error_ind->amf_ue_ngap_id) : "",
+              error_ind->ran_ue_ngap_id_present ? fmt::format(" ran_ue={}", error_ind->ran_ue_ngap_id) : "",
+              error_ind->amf_ue_ngap_id_present ? fmt::format(" amf_ue={}", error_ind->amf_ue_ngap_id) : "",
               error_ind->ran_ue_ngap_id_present || error_ind->amf_ue_ngap_id_present ? ": " : "");
   ngap_notifier.on_new_message(ngap_msg);
 }

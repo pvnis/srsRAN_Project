@@ -60,7 +60,7 @@ protected:
   {
     if (!processor_factory) {
       // Create factories required by the PUCCH demodulator factory.
-      std::shared_ptr<channel_equalizer_factory> equalizer_factory = create_channel_equalizer_factory_zf();
+      std::shared_ptr<channel_equalizer_factory> equalizer_factory = create_channel_equalizer_generic_factory();
       ASSERT_NE(equalizer_factory, nullptr) << "Cannot create equalizer factory.";
 
       std::shared_ptr<channel_modulation_factory> demod_factory = create_channel_modulation_sw_factory();
@@ -89,9 +89,13 @@ protected:
       }
       ASSERT_NE(dft_factory, nullptr) << "Cannot create DFT factory.";
 
+      std::shared_ptr<time_alignment_estimator_factory> ta_estimator_factory =
+          create_time_alignment_estimator_dft_factory(dft_factory);
+      ASSERT_NE(ta_estimator_factory, nullptr) << "Cannot create TA estimator factory.";
+
       // Create channel estimator factory.
       std::shared_ptr<port_channel_estimator_factory> port_chan_estimator_factory =
-          create_port_channel_estimator_factory_sw(dft_factory);
+          create_port_channel_estimator_factory_sw(ta_estimator_factory);
       ASSERT_NE(port_chan_estimator_factory, nullptr) << "Cannot create port channel estimator factory.";
 
       std::shared_ptr<dmrs_pucch_estimator_factory> estimator_factory =

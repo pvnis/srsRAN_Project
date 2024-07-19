@@ -38,7 +38,7 @@ void du_ue_ric_configuration_procedure::operator()(coro_context<async_task<du_ma
   CORO_BEGIN(ctx);
 
   // Change execution context to DU manager.
-  CORO_AWAIT(execute_on(du_params.services.du_mng_exec));
+  CORO_AWAIT(execute_on_blocking(du_params.services.du_mng_exec));
 
   // Run config task inside the UE task loop and await for its completion.
   CORO_AWAIT(dispatch_ue_config_task());
@@ -86,12 +86,23 @@ async_task<mac_ue_reconfiguration_response> du_ue_ric_configuration_procedure::h
   // Configure UE resource allocation parameters.
   mac_request.sched_cfg.res_alloc_cfg.emplace();
   auto& res_alloc_cfg = mac_request.sched_cfg.res_alloc_cfg.value();
+  // For now take first parameter set, in future we will have to support multiple parameter sets for different slices.
+  control_config_params  req     = request.param_list[0];
+  rrm_policy_ratio_group dummy   = {};
+  res_alloc_cfg.rrm_policy_group = req.rrm_policy_group.has_value() ? req.rrm_policy_group.value() : dummy;
+  // TODO remove when RRM group support is added to scheduler.
+  res_alloc_cfg.pdsch_grant_size_limits = {
+      req.rrm_policy_group.has_value() ? (req.rrm_policy_group.value().min_prb_policy_ratio.has_value()
+                                              ? req.rrm_policy_group.value().min_prb_policy_ratio.value()
+                                              : 0)
+                                       : 0,
+      req.rrm_policy_group.has_value() ? (req.rrm_policy_group.value().max_prb_policy_ratio.has_value()
+                                              ? req.rrm_policy_group.value().max_prb_policy_ratio.value()
+                                              : MAX_NOF_PRBS)
+                                       : MAX_NOF_PRBS};
 
-  res_alloc_cfg.pdsch_grant_size_limits = {request.min_prb_alloc.has_value() ? request.min_prb_alloc.value() : 0,
-                                           request.max_prb_alloc.has_value() ? request.max_prb_alloc.value()
-                                                                             : MAX_NOF_PRBS};
-  res_alloc_cfg.max_pdsch_harq_retxs = request.num_harq_retransmissions.has_value()
-                                           ? request.num_harq_retransmissions.value()
+  res_alloc_cfg.max_pdsch_harq_retxs = req.num_harq_retransmissions.has_value()
+                                           ? req.num_harq_retransmissions.value()
                                            : du_params.mac.sched_cfg.ue.max_nof_harq_retxs;
   res_alloc_cfg.max_pusch_harq_retxs = res_alloc_cfg.max_pdsch_harq_retxs;
 

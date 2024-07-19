@@ -36,17 +36,15 @@ ngap_pdu_session_resource_setup_procedure::ngap_pdu_session_resource_setup_proce
     const asn1::ngap::pdu_session_res_setup_request_s& asn1_request_,
     const ngap_ue_ids&                                 ue_ids_,
     ngap_rrc_ue_pdu_notifier&                          rrc_ue_pdu_notifier_,
-    ngap_du_processor_control_notifier&                du_processor_ctrl_notifier_,
+    ngap_cu_cp_notifier&                               cu_cp_notifier_,
     ngap_message_notifier&                             amf_notif_,
-    ngap_control_message_handler&                      ngap_ctrl_handler_,
     ngap_ue_logger&                                    logger_) :
   request(request_),
   asn1_request(asn1_request_),
   ue_ids(ue_ids_),
   rrc_ue_pdu_notifier(rrc_ue_pdu_notifier_),
-  du_processor_ctrl_notifier(du_processor_ctrl_notifier_),
+  cu_cp_notifier(cu_cp_notifier_),
   amf_notifier(amf_notif_),
-  ngap_ctrl_handler(ngap_ctrl_handler_),
   logger(logger_)
 {
 }
@@ -65,8 +63,7 @@ void ngap_pdu_session_resource_setup_procedure::operator()(coro_context<async_ta
     response = verification_outcome.response;
   } else {
     // Handle mandatory IEs
-    CORO_AWAIT_VALUE(
-        response, du_processor_ctrl_notifier.on_new_pdu_session_resource_setup_request(verification_outcome.request));
+    CORO_AWAIT_VALUE(response, cu_cp_notifier.on_new_pdu_session_resource_setup_request(verification_outcome.request));
 
     // TODO: Handle optional IEs
     if (asn1_request->nas_pdu_present) {
@@ -82,12 +79,6 @@ void ngap_pdu_session_resource_setup_procedure::operator()(coro_context<async_ta
   }
 
   send_pdu_session_resource_setup_response();
-
-  // Request UE release in case of a failure to cleanup CU-CP
-  if (!response.pdu_session_res_failed_to_setup_items.empty()) {
-    ue_context_release_request = {ue_ids.ue_index, {}, cause_radio_network_t::release_due_to_ngran_generated_reason};
-    CORO_AWAIT(ngap_ctrl_handler.handle_ue_context_release_request(ue_context_release_request));
-  }
 
   logger.log_debug("\"{}\" finalized", name());
 
@@ -121,6 +112,5 @@ void ngap_pdu_session_resource_setup_procedure::send_pdu_session_resource_setup_
   pdu_session_res_setup_resp->amf_ue_ngap_id = amf_ue_id_to_uint(ue_ids.amf_ue_id);
   pdu_session_res_setup_resp->ran_ue_ngap_id = ran_ue_id_to_uint(ue_ids.ran_ue_id);
 
-  logger.log_info("Sending PduSessionResourceSetupResponse");
   amf_notifier.on_new_message(ngap_msg);
 }

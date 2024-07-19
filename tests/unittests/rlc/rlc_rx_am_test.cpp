@@ -21,7 +21,7 @@
  */
 
 #include "lib/rlc/rlc_rx_am_entity.h"
-#include "rlc_test_helpers.h"
+#include "tests/test_doubles/pdcp/pdcp_pdu_generator.h"
 #include "srsran/support/executors/manual_task_worker.h"
 #include <gtest/gtest.h>
 #include <list>
@@ -80,9 +80,7 @@ public:
 
 /// Fixture class for RLC AM Rx tests.
 /// It requires TEST_P() and INSTANTIATE_TEST_SUITE_P() to create/spawn tests for each config
-class rlc_rx_am_test : public ::testing::Test,
-                       public ::testing::WithParamInterface<rlc_rx_am_config>,
-                       public rlc_trx_test
+class rlc_rx_am_test : public ::testing::Test, public ::testing::WithParamInterface<rlc_rx_am_config>
 {
 protected:
   void SetUp() override
@@ -101,7 +99,7 @@ protected:
     tester = std::make_unique<rlc_rx_am_test_frame>(config.sn_field_length);
 
     // Create RLC AM RX entity
-    rlc = std::make_unique<rlc_rx_am_entity>(0,
+    rlc = std::make_unique<rlc_rx_am_entity>(gnb_du_id_t::min,
                                              du_ue_index_t::MIN_DU_UE_INDEX,
                                              srb_id_t::srb0,
                                              config,
@@ -155,7 +153,8 @@ protected:
     ASSERT_GT(sdu_size, 0) << "Invalid argument: Cannot create PDUs with zero-sized SDU";
     ASSERT_GT(segment_size, 0) << "Invalid argument: Cannot create PDUs with zero-sized SDU segments";
 
-    sdu = create_sdu(sdu_size, first_byte);
+    sdu = test_helpers::create_pdcp_pdu(
+        pdcp_sn_size::size12bits, sn, sdu_size, first_byte); // 12-bit PDCP SN allows smaller SDUs
     pdu_list.clear();
     byte_buffer_view rest = {sdu};
 
@@ -240,7 +239,7 @@ protected:
     // Push PDUs into RLC
     for (std::vector<uint8_t>& pdu_buf : pdu_originals) {
       // write PDU into lower end
-      byte_buffer_slice pdu = {std::move(pdu_buf)};
+      byte_buffer_slice pdu = byte_buffer_slice::create(std::move(pdu_buf)).value();
       rlc->handle_pdu(std::move(pdu));
 
       if (not reverse_sdus) {
@@ -323,7 +322,7 @@ protected:
     // Push PDUs into RLC
     for (std::list<std::vector<uint8_t>>& segment_list : pdu_originals) {
       for (std::vector<uint8_t>& pdu_buf : segment_list) {
-        byte_buffer_slice pdu = {std::move(pdu_buf)};
+        byte_buffer_slice pdu = byte_buffer_slice::create(std::move(pdu_buf)).value();
         rlc->handle_pdu(std::move(pdu));
       }
 
@@ -386,7 +385,7 @@ protected:
     uint32_t i = 0;
     for (const std::vector<uint8_t>& pdu_buf : pdu_list_a) {
       if (i != skip_a1 && i != skip_a2) {
-        byte_buffer_slice pdu = {pdu_buf};
+        byte_buffer_slice pdu = byte_buffer_slice::create(pdu_buf).value();
         rlc->handle_pdu(std::move(pdu));
       }
       i++;
@@ -398,7 +397,7 @@ protected:
     // Push all PDUs again; check that nothing is forwarded to upper layer before except after Rx of 5th segment
     // Push B PDUs into RLC
     for (const std::vector<uint8_t>& pdu_buf : pdu_list_b) {
-      byte_buffer_slice pdu = {pdu_buf};
+      byte_buffer_slice pdu = byte_buffer_slice::create(pdu_buf).value();
       rlc->handle_pdu(std::move(pdu));
     }
     ASSERT_EQ(tester->sdu_queue.size(), 1);
@@ -494,7 +493,7 @@ TEST_P(rlc_rx_am_test, rx_valid_control_pdu)
   EXPECT_EQ(status.pack(pdu_buf), status.get_packed_size());
 
   // Pass through RLC
-  byte_buffer_slice pdu = {std::move(pdu_buf)};
+  byte_buffer_slice pdu = byte_buffer_slice::create(std::move(pdu_buf)).value();
   rlc->handle_pdu(std::move(pdu));
 
   // Pick and verify the received status PDU on the other end
@@ -521,7 +520,7 @@ TEST_P(rlc_rx_am_test, rx_invalid_control_pdu)
   *(pdu_buf.begin()) |= 0x70;
 
   // Push into RLC
-  byte_buffer_slice pdu = {std::move(pdu_buf)};
+  byte_buffer_slice pdu = byte_buffer_slice::create(std::move(pdu_buf)).value();
   rlc->handle_pdu(std::move(pdu));
 
   // Pick and verify the received status PDU on the other end
@@ -592,7 +591,7 @@ TEST_P(rlc_rx_am_test, rx_polling_bit_sn_inside_rx_window)
   EXPECT_FALSE(rlc->status_report_required());
 
   uint32_t sn_state = 0;
-  uint32_t sdu_size = 1;
+  uint32_t sdu_size = 4;
 
   // Create SDU and PDU with full SDU
   std::list<std::vector<uint8_t>> pdu_list = {};
@@ -604,7 +603,7 @@ TEST_P(rlc_rx_am_test, rx_polling_bit_sn_inside_rx_window)
   *(pdu_list.front().begin()) |= 0b01000000; // set P = 1;
 
   // Push into RLC
-  byte_buffer_slice pdu = {std::move(pdu_list.front())};
+  byte_buffer_slice pdu = byte_buffer_slice::create(std::move(pdu_list.front())).value();
   rlc->handle_pdu(std::move(pdu));
 
   // Check if polling bit of PDU was properly considered
@@ -625,7 +624,7 @@ TEST_P(rlc_rx_am_test, rx_polling_bit_sn_outside_rx_window)
   EXPECT_FALSE(rlc->status_report_required());
 
   uint32_t sn_state = window_size(to_number(sn_size)); // out-of-window SN
-  uint32_t sdu_size = 1;
+  uint32_t sdu_size = 4;
 
   // Create SDU and PDU with full SDU
   std::list<std::vector<uint8_t>> pdu_list = {};
@@ -637,7 +636,7 @@ TEST_P(rlc_rx_am_test, rx_polling_bit_sn_outside_rx_window)
   *(pdu_list.front().begin()) |= 0b01000000; // set P = 1;
 
   // Push into RLC
-  byte_buffer_slice pdu = {std::move(pdu_list.front())};
+  byte_buffer_slice pdu = byte_buffer_slice::create(std::move(pdu_list.front())).value();
   rlc->handle_pdu(std::move(pdu));
 
   // Check if polling bit was considered, despite out-of-window SN
@@ -655,7 +654,7 @@ TEST_P(rlc_rx_am_test, rx_polling_bit_sdu_duplicate)
   EXPECT_FALSE(rlc->status_report_required());
 
   uint32_t sn_state = 1; // further incremented SN to prevent that reception will advance rx_window
-  uint32_t sdu_size = 1;
+  uint32_t sdu_size = 4;
 
   // Create SDU and PDU with full SDU
   std::list<std::vector<uint8_t>> pdu_list = {};
@@ -664,7 +663,7 @@ TEST_P(rlc_rx_am_test, rx_polling_bit_sdu_duplicate)
   sn_state++;
 
   // Push into RLC
-  byte_buffer_slice pdu = {pdu_list.front()};
+  byte_buffer_slice pdu = byte_buffer_slice::create(pdu_list.front()).value();
   rlc->handle_pdu(std::move(pdu));
 
   // Check if polling bit has not changed
@@ -681,7 +680,7 @@ TEST_P(rlc_rx_am_test, rx_polling_bit_sdu_duplicate)
   *(pdu_list.front().begin()) |= 0b01000000; // set P = 1;
 
   // Push into RLC
-  pdu = {pdu_list.front()};
+  pdu = byte_buffer_slice::create(pdu_list.front()).value();
   rlc->handle_pdu(std::move(pdu));
 
   // Check if polling bit was considered, despite duplicate SN
@@ -721,7 +720,7 @@ TEST_P(rlc_rx_am_test, rx_duplicate_segments)
   int i = 0;
   for (const std::vector<uint8_t>& pdu_buf : pdu_list) {
     if (i != 5) {
-      byte_buffer_slice pdu = {pdu_buf};
+      byte_buffer_slice pdu = byte_buffer_slice::create(pdu_buf).value();
       rlc->handle_pdu(std::move(pdu));
     }
     i++;
@@ -733,7 +732,7 @@ TEST_P(rlc_rx_am_test, rx_duplicate_segments)
   // Push all PDUs again; check that nothing is forwarded to upper layer before except after Rx of 5th segment
   i = 0;
   for (const std::vector<uint8_t>& pdu_buf : pdu_list) {
-    byte_buffer_slice pdu = {pdu_buf};
+    byte_buffer_slice pdu = byte_buffer_slice::create(pdu_buf).value();
     rlc->handle_pdu(std::move(pdu));
     if (i == 5) {
       // check if SDU has been assembled correctly
@@ -838,7 +837,7 @@ TEST_P(rlc_rx_am_test, status_prohibit_timer)
   EXPECT_EQ(tester->status_trigger_counter, 0);
 
   uint32_t sn_state = 0;
-  uint32_t sdu_size = 1;
+  uint32_t sdu_size = 4;
 
   {
     // check status report, reset status_prohibit_timer
@@ -860,7 +859,7 @@ TEST_P(rlc_rx_am_test, status_prohibit_timer)
   *(pdu_list.front().begin()) |= 0b01000000; // set P = 1;
 
   // Push into RLC
-  byte_buffer_slice pdu = {std::move(pdu_list.front())};
+  byte_buffer_slice pdu = byte_buffer_slice::create(std::move(pdu_list.front())).value();
   rlc->handle_pdu(std::move(pdu));
 
   // Status report must not be required as long as status_prohibit_timer is running
@@ -923,7 +922,7 @@ TEST_P(rlc_rx_am_test, reassembly_timer)
   int i = 0;
   for (const std::vector<uint8_t>& pdu_buf : pdu_list) {
     if (i != 5) {
-      byte_buffer_slice pdu = {pdu_buf};
+      byte_buffer_slice pdu = byte_buffer_slice::create(pdu_buf).value();
       rlc->handle_pdu(std::move(pdu));
     }
     i++;
@@ -992,7 +991,7 @@ TEST_P(rlc_rx_am_test, when_rx_next_highest_equal_to_rx_next_reassembly_timer_tr
     }
     ASSERT_EQ(0, st.rx_next);
     if (i != 5) {
-      byte_buffer_slice pdu = {pdu_buf};
+      byte_buffer_slice pdu = byte_buffer_slice::create(pdu_buf).value();
       rlc->handle_pdu(std::move(pdu));
     }
     i++;
@@ -1014,8 +1013,8 @@ TEST_P(rlc_rx_am_test, when_rx_next_highest_equal_to_rx_next_reassembly_timer_tr
 TEST_P(rlc_rx_am_test, when_rx_next_highest_larger_then_rx_next_reassembly_timer_triggered)
 {
   uint32_t sn_state     = 0;
-  uint32_t sdu_size     = 1;
-  uint32_t segment_size = 1;
+  uint32_t sdu_size     = 4;
+  uint32_t segment_size = 4;
   uint32_t n_sdus       = 10;
 
   // Create SDU and PDUs with SDU segments
@@ -1042,7 +1041,7 @@ TEST_P(rlc_rx_am_test, when_rx_next_highest_larger_then_rx_next_reassembly_timer
   int i = 0;
   for (const auto& pdu_it : pdus) {
     if (i != 5) {
-      byte_buffer_slice pdu = {pdu_it.front()};
+      byte_buffer_slice pdu = byte_buffer_slice::create(pdu_it.front()).value();
       rlc->handle_pdu(std::move(pdu));
     }
     i++;
@@ -1087,7 +1086,7 @@ TEST_P(rlc_rx_am_test, when_rx_next_highest_equal_to_rx_next_but_no_byte_missing
     }
     ASSERT_EQ(0, st.rx_next);
     if (i != 9) {
-      byte_buffer_slice pdu = {pdu_buf};
+      byte_buffer_slice pdu = byte_buffer_slice::create(pdu_buf).value();
       rlc->handle_pdu(std::move(pdu));
     }
     i++;
@@ -1136,7 +1135,7 @@ TEST_P(rlc_rx_am_test, status_report)
   uint32_t i = 0;
   for (std::vector<uint8_t>& pdu_buf : pdu_list) {
     if (i != 4 && i != 6 && i != 7 && i != 9) {
-      byte_buffer_slice pdu = {std::move(pdu_buf)};
+      byte_buffer_slice pdu = byte_buffer_slice::create(std::move(pdu_buf)).value();
       rlc->handle_pdu(std::move(pdu));
     } else {
       missing_pdus.push_back(std::move(pdu_buf));
@@ -1155,7 +1154,7 @@ TEST_P(rlc_rx_am_test, status_report)
 
     // Push PDUs except for 4th, 6th and 7th into RLC
     if (sn_state != 4 && sn_state != 6 && sn_state != 7) {
-      byte_buffer_slice pdu = {std::move(pdu_list.front())};
+      byte_buffer_slice pdu = byte_buffer_slice::create(std::move(pdu_list.front())).value();
       rlc->handle_pdu(std::move(pdu));
     } else {
       missing_pdus.push_back(std::move(pdu_list.front()));
@@ -1210,7 +1209,7 @@ TEST_P(rlc_rx_am_test, status_report)
   *(pdu_list.front().begin()) |= 0b01000000; // set P = 1;
 
   // Push into RLC
-  byte_buffer_slice pdu = {std::move(pdu_list.front())};
+  byte_buffer_slice pdu = byte_buffer_slice::create(std::move(pdu_list.front())).value();
   rlc->handle_pdu(std::move(pdu));
 
   EXPECT_FALSE(rlc->status_report_required()); // status prohibit timer is not yet expired, regardless we read status
@@ -1312,7 +1311,7 @@ TEST_P(rlc_rx_am_test_with_limit, status_report_large_window)
     ASSERT_NO_FATAL_FAILURE(create_pdus(pdu_list, sdu, sn_state, sdu_size, segment_size, sn_state));
 
     // Push only first segment
-    byte_buffer_slice pdu = {pdu_list.front()};
+    byte_buffer_slice pdu = byte_buffer_slice::create(pdu_list.front()).value();
     rlc->handle_pdu(std::move(pdu));
   }
 
@@ -1326,7 +1325,7 @@ TEST_P(rlc_rx_am_test_with_limit, status_report_large_window)
     ASSERT_NO_FATAL_FAILURE(create_pdus(pdu_list, sdu, sn_state, sdu_size, segment_size, sn_state));
 
     // Push only first segment
-    byte_buffer_slice pdu = {pdu_list.front()};
+    byte_buffer_slice pdu = byte_buffer_slice::create(pdu_list.front()).value();
     rlc->handle_pdu(std::move(pdu));
   }
 
@@ -1340,7 +1339,7 @@ TEST_P(rlc_rx_am_test_with_limit, status_report_large_window)
     ASSERT_NO_FATAL_FAILURE(create_pdus(pdu_list, sdu, sn_state, sdu_size, segment_size, sn_state));
 
     // Push only first segment
-    byte_buffer_slice pdu = {pdu_list.front()};
+    byte_buffer_slice pdu = byte_buffer_slice::create(pdu_list.front()).value();
     rlc->handle_pdu(std::move(pdu));
   }
 
@@ -1369,7 +1368,7 @@ TEST_P(rlc_rx_am_test, rx_without_segmentation)
   const uint32_t n_sdus = 5;
   uint32_t       sn     = 0;
 
-  rx_full_sdus(sn, n_sdus, 1, /* reverse_sdus = */ false);
+  rx_full_sdus(sn, n_sdus, 4, /* reverse_sdus = */ false);
   rx_full_sdus(sn, n_sdus, 5, /* reverse_sdus = */ false);
 }
 
@@ -1380,51 +1379,51 @@ TEST_P(rlc_rx_am_test, rx_reverse_without_segmentation)
   const uint32_t n_sdus = 5;
   uint32_t       sn     = 0;
 
-  rx_full_sdus(sn, n_sdus, 1, /* reverse_sdus = */ true);
+  rx_full_sdus(sn, n_sdus, 4, /* reverse_sdus = */ true);
   rx_full_sdus(sn, n_sdus, 5, /* reverse_sdus = */ true);
 }
 
 /// Verify in-order Rx of SDU segments
-/// Example: [0 0:0][0 1:1][1 0:0][1 1:1][2 0:0][2 1:1][3 0:0][3 1:1][4 0:0][4 1:1]
+/// Example: [0 0:1][0 2:3][1 0:1][1 2:3][2 0:1][2 2:3][3 0:1][3 2:3][4 0:1][4 2:3]
 TEST_P(rlc_rx_am_test, rx_with_segmentation)
 {
   const uint32_t n_sdus = 5;
   uint32_t       sn     = 0;
 
-  rx_sdu_segments(sn, n_sdus, 2, 1, /* reverse_sdus = */ false, /* reverse_segments = */ false);
+  rx_sdu_segments(sn, n_sdus, 4, 2, /* reverse_sdus = */ false, /* reverse_segments = */ false);
   rx_sdu_segments(sn, n_sdus, 8, 3, /* reverse_sdus = */ false, /* reverse_segments = */ false);
 }
 
 /// Verify reverse-order Rx of SDU segments but the segments of each SDU are transmitted in order
-/// Example: [4 0:0][4 1:1][3 0:0][3 1:1][2 0:0][2 1:1][1 0:0][1 1:1][0 0:0][0 1:1]
+/// Example: [4 0:1][4 2:3][3 0:1][3 2:3][2 0:1][2 2:3][1 0:1][1 2:3][0 0:1][0 2:3]
 TEST_P(rlc_rx_am_test, rx_reverse_with_segmentation)
 {
   const uint32_t n_sdus = 5;
   uint32_t       sn     = 0;
 
-  rx_sdu_segments(sn, n_sdus, 2, 1, /* reverse_sdus = */ true, /* reverse_segments = */ false);
+  rx_sdu_segments(sn, n_sdus, 4, 2, /* reverse_sdus = */ true, /* reverse_segments = */ false);
   rx_sdu_segments(sn, n_sdus, 8, 3, /* reverse_sdus = */ true, /* reverse_segments = */ false);
 }
 
 /// Verify in-order Rx of SDU segments but the segments of each SDU are transmitted in reverse order
-/// Example: [0 1:1][0 0:0][1 1:1][1 0:0][2 1:1][2 0:0][3 0:0][3 1:1][3 0:0][4 1:1][4 0:0]
+/// Example: [0 2:3][0 0:1][1 2:3][1 0:1][2 2:3][2 0:1][3 2:3][3 0:1][4 2:3][4 0:1]
 TEST_P(rlc_rx_am_test, rx_with_reversed_segmentation)
 {
   const uint32_t n_sdus = 5;
   uint32_t       sn     = 0;
 
-  rx_sdu_segments(sn, n_sdus, 2, 1, /* reverse_sdus = */ false, /* reverse_segments = */ true);
+  rx_sdu_segments(sn, n_sdus, 4, 2, /* reverse_sdus = */ false, /* reverse_segments = */ true);
   rx_sdu_segments(sn, n_sdus, 8, 3, /* reverse_sdus = */ false, /* reverse_segments = */ true);
 }
 
 /// Verify reverse-order Rx of SDU segments and the segments of each SDU are transmitted in reverse order
-/// Example: [4 1:1][4 0:0][3 0:0][3 1:1][3 0:0][2 1:1][2 0:0][1 1:1][1 0:0][0 1:1][0 0:0]
+/// Example: [4 2:3][4 0:1][3 2:3][3 0:1][2 2:3][2 0:1][1 2:3][1 0:1][0 2:3][0 0:1]
 TEST_P(rlc_rx_am_test, rx_reverse_with_reversed_segmentation)
 {
   const uint32_t n_sdus = 5;
   uint32_t       sn     = 0;
 
-  rx_sdu_segments(sn, n_sdus, 2, 1, /* reverse_sdus = */ true, /* reverse_segments = */ true);
+  rx_sdu_segments(sn, n_sdus, 4, 3, /* reverse_sdus = */ true, /* reverse_segments = */ true);
   rx_sdu_segments(sn, n_sdus, 8, 3, /* reverse_sdus = */ true, /* reverse_segments = */ true);
 }
 

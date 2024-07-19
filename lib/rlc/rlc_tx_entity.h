@@ -38,16 +38,17 @@ class rlc_tx_entity : public rlc_tx_upper_layer_data_interface,
                       public rlc_tx_metrics
 {
 protected:
-  rlc_tx_entity(uint32_t                             du_index,
+  rlc_tx_entity(gnb_du_id_t                          gnb_du_id,
                 du_ue_index_t                        ue_index,
-                rb_id_t                              rb_id,
+                rb_id_t                              rb_id_,
                 rlc_tx_upper_layer_data_notifier&    upper_dn_,
                 rlc_tx_upper_layer_control_notifier& upper_cn_,
                 rlc_tx_lower_layer_notifier&         lower_dn_,
                 bool                                 metrics_enabled,
                 rlc_pcap&                            pcap_) :
-    logger("RLC", {du_index, ue_index, rb_id, "DL"}),
+    logger("RLC", {gnb_du_id, ue_index, rb_id_, "DL"}),
     metrics(metrics_enabled),
+    rb_id(rb_id_),
     upper_dn(upper_dn_),
     upper_cn(upper_cn_),
     lower_dn(lower_dn_),
@@ -57,12 +58,23 @@ protected:
 
   rlc_bearer_logger                    logger;
   rlc_tx_metrics_container             metrics;
+  rb_id_t                              rb_id;
   rlc_tx_upper_layer_data_notifier&    upper_dn;
   rlc_tx_upper_layer_control_notifier& upper_cn;
   rlc_tx_lower_layer_notifier&         lower_dn;
   rlc_pcap&                            pcap;
 
 public:
+  /// \brief Stops all internal timers.
+  ///
+  /// This function is inteded to be called upon removal of the bearer before destroying it.
+  /// It stops all timers with handlers that may delegate tasks to another executor that could face a deleted object at
+  /// a later execution time.
+  /// Before this function is called, the adjacent layers should already be disconnected so that no timer is restarted.
+  ///
+  /// Note: This function shall only be called from ue_executor.
+  virtual void stop() = 0;
+
   rlc_tx_metrics get_metrics() { return metrics.get_metrics(); }
   void           reset_metrics() { return metrics.reset_metrics(); }
 };

@@ -77,13 +77,17 @@ public:
                  pdcp_tx_config                  cfg_,
                  pdcp_tx_lower_notifier&         lower_dn_,
                  pdcp_tx_upper_control_notifier& upper_cn_,
-                 timer_factory                   timers_) :
+                 timer_factory                   ue_dl_timer_factory_,
+                 task_executor&                  ue_dl_executor_,
+                 task_executor&                  crypto_executor_) :
     pdcp_entity_tx_rx_base(rb_id_, cfg_.rb_type, cfg_.rlc_mode, cfg_.sn_size),
     logger("PDCP", {ue_index, rb_id_, "DL"}),
     cfg(cfg_),
     lower_dn(lower_dn_),
     upper_cn(upper_cn_),
-    timers(timers_),
+    ue_dl_timer_factory(ue_dl_timer_factory_),
+    ue_dl_executor(ue_dl_executor_),
+    crypto_executor(crypto_executor_),
     tx_window(create_tx_window(cfg.sn_size))
   {
     // Validate configuration
@@ -103,6 +107,10 @@ public:
     direction = cfg.direction == pdcp_security_direction::uplink ? security::security_direction::uplink
                                                                  : security::security_direction::downlink;
     logger.log_info("PDCP configured. {}", cfg);
+
+    // TODO: implement usage of crypto_executor
+    (void)ue_dl_executor;
+    (void)crypto_executor;
   }
 
   /// \brief Triggers re-establishment as specified in TS 38.323, section 5.1.2
@@ -118,6 +126,8 @@ public:
 
   void handle_transmit_notification(uint32_t notif_sn) override;
   void handle_delivery_notification(uint32_t notif_sn) override;
+  void handle_retransmit_notification(uint32_t notif_sn) override;
+  void handle_delivery_retransmitted_notification(uint32_t notif_sn) override;
 
   /// \brief Evaluates a PDCP status report
   ///
@@ -179,9 +189,9 @@ public:
     logger.log_info(
         "Security configured: NIA{} NEA{} domain={}", sec_cfg.integ_algo, sec_cfg.cipher_algo, sec_cfg.domain);
     if (sec_cfg.k_128_int.has_value()) {
-      logger.log_info(sec_cfg.k_128_int.value().data(), 16, "128 K_int");
+      logger.log_info("128 K_int: {}", sec_cfg.k_128_int.value());
     }
-    logger.log_info(sec_cfg.k_128_enc.data(), 16, "128 K_enc");
+    logger.log_info("128 K_enc: {}", sec_cfg.k_128_enc);
   };
 
   void set_integrity_protection(security::integrity_enabled integrity_enabled_) final
@@ -224,7 +234,10 @@ private:
   pdcp_rx_status_provider*        status_provider = nullptr;
   pdcp_tx_lower_notifier&         lower_dn;
   pdcp_tx_upper_control_notifier& upper_cn;
-  timer_factory                   timers;
+  timer_factory                   ue_dl_timer_factory;
+
+  task_executor& ue_dl_executor;
+  task_executor& crypto_executor;
 
   pdcp_tx_state                st        = {};
   security::security_direction direction = security::security_direction::downlink;
@@ -233,7 +246,7 @@ private:
   security::integrity_enabled integrity_enabled = security::integrity_enabled::off;
   security::ciphering_enabled ciphering_enabled = security::ciphering_enabled::off;
 
-  void write_data_pdu_to_lower_layers(uint32_t count, byte_buffer buf);
+  void write_data_pdu_to_lower_layers(uint32_t count, byte_buffer buf, bool is_retx);
   void write_control_pdu_to_lower_layers(byte_buffer buf);
 
   /// Apply ciphering and integrity protection to the payload

@@ -28,7 +28,6 @@
 #include <numeric>
 #include <random>
 
-using namespace std;
 using namespace asn1;
 using srsran::byte_buffer;
 
@@ -197,7 +196,7 @@ TEST(asn1_bit_ref, pack_unpack_operators)
 
   // test advance bits
   {
-    srsran::byte_buffer buf{std::vector<uint8_t>(256)};
+    srsran::byte_buffer buf = byte_buffer::create(std::vector<uint8_t>(256)).value();
     cbit_ref            bref(buf);
     ASSERT_EQ(SRSASN_SUCCESS, bref.advance_bits(4));
     ASSERT_EQ(4, bref.distance());

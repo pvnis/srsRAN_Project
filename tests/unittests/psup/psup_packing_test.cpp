@@ -21,6 +21,7 @@
  */
 
 #include "srsran/psup/psup_packing.h"
+#include "srsran/srslog/srslog.h"
 #include <gtest/gtest.h>
 
 using namespace srsran;
@@ -72,7 +73,7 @@ TEST_F(psup_packing_test, pack_psup_dl_pdu_session_information_smallest)
             // No further fields
             // No padding
   };
-  EXPECT_EQ(out_buf, byte_buffer{expected_vec});
+  EXPECT_EQ(out_buf, byte_buffer::create(expected_vec).value());
 }
 
 TEST_F(psup_packing_test, unpack_psup_dl_pdu_session_information_smallest)
@@ -83,7 +84,7 @@ TEST_F(psup_packing_test, unpack_psup_dl_pdu_session_information_smallest)
             // No further fields
             // No padding
   };
-  byte_buffer                     packed_buf{packed_vec};
+  byte_buffer                     packed_buf = byte_buffer::create(packed_vec).value();
   psup_dl_pdu_session_information out_sess_info;
   packer->unpack(out_sess_info, packed_buf);
   psup_dl_pdu_session_information expected_sess_info{};
@@ -117,7 +118,7 @@ TEST_F(psup_packing_test, pack_psup_dl_pdu_session_information_largest)
       0x01,
       // No padding
   };
-  EXPECT_EQ(out_buf, byte_buffer{expected_vec});
+  EXPECT_EQ(out_buf, byte_buffer::create(expected_vec).value());
 }
 
 TEST_F(psup_packing_test, unpack_psup_dl_pdu_session_information_largest)
@@ -139,7 +140,7 @@ TEST_F(psup_packing_test, unpack_psup_dl_pdu_session_information_largest)
       0x01,
       // No padding
   };
-  byte_buffer                     packed_buf{packed_vec};
+  byte_buffer                     packed_buf = byte_buffer::create(packed_vec).value();
   psup_dl_pdu_session_information out_sess_info;
   packer->unpack(out_sess_info, packed_buf);
   psup_dl_pdu_session_information expected_sess_info{};
@@ -161,7 +162,7 @@ TEST_F(psup_packing_test, pack_unpack_psup_dl_pdu_session_information_grow)
   buf_out.clear();
   packer->pack(buf_out, sess_info_in);
   EXPECT_TRUE((buf_out.length() + 2) % 4 == 0);
-  buf_in = buf_out.deep_copy();
+  buf_in = buf_out.deep_copy().value();
   packer->unpack(sess_info_out, buf_in);
   EXPECT_EQ(sess_info_out, sess_info_in);
 
@@ -170,7 +171,7 @@ TEST_F(psup_packing_test, pack_unpack_psup_dl_pdu_session_information_grow)
   packer->pack(buf_out, sess_info_in);
   EXPECT_EQ(buf_out.length(), 6);
   EXPECT_TRUE((buf_out.length() + 2) % 4 == 0);
-  buf_in = buf_out.deep_copy();
+  buf_in = buf_out.deep_copy().value();
   packer->unpack(sess_info_out, buf_in);
   EXPECT_EQ(sess_info_out, sess_info_in);
 
@@ -179,7 +180,7 @@ TEST_F(psup_packing_test, pack_unpack_psup_dl_pdu_session_information_grow)
   packer->pack(buf_out, sess_info_in);
   EXPECT_EQ(buf_out.length(), 14);
   EXPECT_TRUE((buf_out.length() + 2) % 4 == 0);
-  buf_in = buf_out.deep_copy();
+  buf_in = buf_out.deep_copy().value();
   packer->unpack(sess_info_out, buf_in);
   EXPECT_EQ(sess_info_out, sess_info_in);
 
@@ -188,7 +189,7 @@ TEST_F(psup_packing_test, pack_unpack_psup_dl_pdu_session_information_grow)
   packer->pack(buf_out, sess_info_in);
   EXPECT_EQ(buf_out.length(), 14);
   EXPECT_TRUE((buf_out.length() + 2) % 4 == 0);
-  buf_in = buf_out.deep_copy();
+  buf_in = buf_out.deep_copy().value();
   packer->unpack(sess_info_out, buf_in);
   EXPECT_EQ(sess_info_out, sess_info_in);
 }

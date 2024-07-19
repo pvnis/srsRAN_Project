@@ -21,7 +21,7 @@
  */
 
 #include "../../../lib/fapi_adaptor/phy/fapi_to_phy_translator.h"
-#include "../../fapi/validators/helpers.h"
+#include "../../fapi/message_builder_helpers.h"
 #include "../../phy/support/resource_grid_test_doubles.h"
 #include "../../phy/upper/downlink_processor_test_doubles.h"
 #include "../../phy/upper/uplink_request_processor_test_doubles.h"
@@ -77,6 +77,7 @@ public:
   bool is_valid(const pucch_processor::format3_configuration& config) const override { return true; }
   bool is_valid(const pucch_processor::format4_configuration& config) const override { return true; }
   bool is_valid(const pusch_processor::pdu_t& pdu) const override { return true; }
+  bool is_valid(const srs_estimator_configuration& config) const override { return true; }
 };
 
 class resource_grid_pool_dummy : public resource_grid_pool

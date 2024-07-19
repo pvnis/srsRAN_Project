@@ -24,9 +24,9 @@
 #include "lib/e1ap/cu_up/e1ap_cu_up_asn1_helpers.h"
 #include "srsran/asn1/e1ap/e1ap.h"
 #include "srsran/cu_up/cu_up_factory.h"
+#include "srsran/pdcp/pdcp_sn_util.h"
 #include "srsran/support/executors/task_worker.h"
 #include "srsran/support/io/io_broker_factory.h"
-#include "srsran/support/test_utils.h"
 #include <arpa/inet.h>
 #include <chrono>
 #include <fcntl.h>
@@ -41,7 +41,7 @@ using namespace asn1::e1ap;
 
 /// This implementation returns back to the E1 interface a dummy CU-UP E1 Setup Response message upon the receival of
 /// the CU-UP E1 Setup Request message.
-class dummy_cu_cp_handler : public e1ap_connection_client
+class dummy_cu_cp_handler : public e1_connection_client
 {
 public:
   std::unique_ptr<e1ap_message_notifier>
@@ -102,11 +102,13 @@ protected:
     srslog::init();
 
     srslog::fetch_basic_logger("GTPU").set_level(srslog::basic_levels::debug);
+    srslog::fetch_basic_logger("E1AP").set_level(srslog::basic_levels::debug);
 
     // create worker thread and executer
     worker   = std::make_unique<task_worker>("thread", 128, os_thread_realtime_priority::no_realtime());
     executor = make_task_executor_ptr(*worker);
 
+    exec_pool    = std::make_unique<dummy_cu_up_executor_pool>(executor.get());
     app_timers   = std::make_unique<timer_manager>(256);
     f1u_gw       = std::make_unique<dummy_f1u_gateway>(f1u_bearer);
     broker       = create_io_broker(io_broker_type::epoll);
@@ -118,12 +120,11 @@ protected:
     // create config
     cu_up_configuration cfg;
     cfg.ctrl_executor                = executor.get();
-    cfg.dl_executor                  = executor.get();
-    cfg.ul_executor                  = executor.get();
+    cfg.ue_exec_pool                 = exec_pool.get();
     cfg.io_ul_executor               = executor.get();
-    cfg.e1ap.e1ap_conn_client        = &e1ap_client;
+    cfg.e1ap.e1_conn_client          = &e1ap_client;
     cfg.f1u_gateway                  = f1u_gw.get();
-    cfg.epoll_broker                 = broker.get();
+    cfg.ngu_gw                       = ngu_gw.get();
     cfg.timers                       = app_timers.get();
     cfg.qos[uint_to_five_qi(9)]      = {};
     cfg.gtpu_pcap                    = &dummy_pcap;
@@ -135,7 +136,18 @@ protected:
     return cfg;
   }
 
-  void init(const cu_up_configuration& cfg) { cu_up = create_cu_up(cfg); }
+  void init(const cu_up_configuration& cfg)
+  {
+    udp_network_gateway_config udp_cfg{};
+    udp_cfg.bind_interface = cfg.net_cfg.n3_bind_interface;
+    udp_cfg.bind_address   = cfg.net_cfg.n3_bind_addr;
+    udp_cfg.bind_port      = cfg.net_cfg.n3_bind_port;
+    ngu_gw                 = create_udp_ngu_gateway(udp_cfg, *broker, *executor);
+
+    auto cfg_copy   = cfg;
+    cfg_copy.ngu_gw = ngu_gw.get();
+    cu_up           = create_cu_up(cfg_copy);
+  }
 
   void TearDown() override
   {
@@ -149,6 +161,8 @@ protected:
   dummy_inner_f1u_bearer                      f1u_bearer;
   std::unique_ptr<dummy_f1u_gateway>          f1u_gw;
   std::unique_ptr<io_broker>                  broker;
+  std::unique_ptr<ngu_gateway>                ngu_gw;
+  std::unique_ptr<dummy_cu_up_executor_pool>  exec_pool;
   std::unique_ptr<srs_cu_up::cu_up_interface> cu_up;
   srslog::basic_logger&                       test_logger = srslog::fetch_basic_logger("TEST");
 
@@ -211,7 +225,7 @@ TEST_F(cu_up_test, dl_data_flow)
 
   // teid=2, qfi=1
   const uint8_t gtpu_ping_vec[] = {
-      0x34, 0xff, 0x00, 0x5c, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x85, 0x01, 0x00, 0x01, 0x00, 0x45,
+      0x34, 0xff, 0x00, 0x5c, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x85, 0x01, 0x00, 0x01, 0x00, 0x45,
       0x00, 0x00, 0x54, 0x9b, 0xfb, 0x00, 0x00, 0x40, 0x01, 0x56, 0x5a, 0xc0, 0xa8, 0x04, 0x01, 0xc0, 0xa8,
       0x03, 0x02, 0x00, 0x00, 0xb8, 0xc0, 0x00, 0x02, 0x00, 0x01, 0x5d, 0x26, 0x77, 0x64, 0x00, 0x00, 0x00,
       0x00, 0xb1, 0xde, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
@@ -233,14 +247,16 @@ TEST_F(cu_up_test, dl_data_flow)
   close(sock_fd);
 
   // check reception of message 1
-  pdcp_tx_pdu sdu1 = f1u_bearer.wait_tx_sdu();
-  ASSERT_TRUE(sdu1.pdcp_sn.has_value());
-  EXPECT_EQ(sdu1.pdcp_sn.value(), 0);
+  nru_dl_message          sdu1         = f1u_bearer.wait_tx_sdu();
+  std::optional<uint32_t> sdu1_pdcp_sn = get_pdcp_sn(sdu1.t_pdu, pdcp_sn_size::size18bits, test_logger);
+  ASSERT_TRUE(sdu1_pdcp_sn.has_value());
+  EXPECT_EQ(sdu1_pdcp_sn.value(), 0);
 
   // check reception of message 2
-  pdcp_tx_pdu sdu2 = f1u_bearer.wait_tx_sdu();
-  ASSERT_TRUE(sdu2.pdcp_sn.has_value());
-  EXPECT_EQ(sdu2.pdcp_sn.value(), 1);
+  nru_dl_message          sdu2         = f1u_bearer.wait_tx_sdu();
+  std::optional<uint32_t> sdu2_pdcp_sn = get_pdcp_sn(sdu2.t_pdu, pdcp_sn_size::size18bits, test_logger);
+  ASSERT_TRUE(sdu2_pdcp_sn.has_value());
+  EXPECT_EQ(sdu2_pdcp_sn.value(), 1);
 
   // check nothing else was received
   EXPECT_FALSE(f1u_bearer.have_tx_sdu());
@@ -289,9 +305,10 @@ TEST_F(cu_up_test, ul_data_flow)
       0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28,
       0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37};
   span<const uint8_t> t_pdu_span1 = {t_pdu_arr1};
-  byte_buffer         t_pdu_buf1  = {t_pdu_span1};
+  byte_buffer         t_pdu_buf1  = byte_buffer::create(t_pdu_span1).value();
   nru_ul_message      nru_msg1    = {};
-  nru_msg1.t_pdu                  = byte_buffer_chain{std::move(t_pdu_buf1)};
+  nru_msg1.t_pdu                  = byte_buffer_chain::create(std::move(t_pdu_buf1)).value();
+
   f1u_bearer.handle_pdu(std::move(nru_msg1));
 
   // send message 2
@@ -302,9 +319,10 @@ TEST_F(cu_up_test, ul_data_flow)
       0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28,
       0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37};
   span<const uint8_t> t_pdu_span2 = {t_pdu_arr2};
-  byte_buffer         t_pdu_buf2  = {t_pdu_span2};
+  byte_buffer         t_pdu_buf2  = byte_buffer::create(t_pdu_span2).value();
   nru_ul_message      nru_msg2    = {};
-  nru_msg2.t_pdu                  = byte_buffer_chain{std::move(t_pdu_buf2)};
+  nru_msg2.t_pdu                  = byte_buffer_chain::create(std::move(t_pdu_buf2)).value();
+
   f1u_bearer.handle_pdu(std::move(nru_msg2));
 
   std::array<uint8_t, 128> rx_buf;

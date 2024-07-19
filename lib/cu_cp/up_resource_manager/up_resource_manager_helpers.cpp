@@ -116,7 +116,7 @@ bool srsran::srs_cu_cp::is_valid(
   // Reject request if PDU session with same ID already exists.
   for (const auto& pdu_session : setup_items) {
     if (context.pdu_sessions.find(pdu_session.pdu_session_id) != context.pdu_sessions.end()) {
-      logger.debug("PDU session ID {} already exists", pdu_session.pdu_session_id);
+      logger.info("PDU session ID {} already exists", pdu_session.pdu_session_id);
       return false;
     }
 
@@ -381,15 +381,10 @@ up_config_update srsran::srs_cu_cp::calculate_update(const cu_cp_pdu_session_res
     // Release all DRBs.
     const auto& session_context = context.pdu_sessions.at(release_item.pdu_session_id);
     for (const auto& drb : session_context.drbs) {
+      logger.debug("Removing {}", drb.first);
       update.drb_to_remove_list.push_back(drb.first);
     }
     update.pdu_sessions_to_remove_list.push_back(release_item.pdu_session_id);
-  }
-
-  // Request context release if all active PDU session are going to be released.
-  if (update.pdu_sessions_to_remove_list.size() == context.pdu_sessions.size()) {
-    logger.debug("UE context removal required as all PDU sessions get released");
-    update.context_removal_required = true;
   }
 
   return update;

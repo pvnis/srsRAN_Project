@@ -53,7 +53,12 @@ public:
   /// \brief Handle the removal of an existing UE context by F1AP request.
   async_task<void> handle_ue_delete_request(const f1ap_ue_delete_request& msg);
 
+  /// \brief Handle the deactivation of an existing UE context by F1AP request.
+  async_task<void> handle_ue_deactivation_request(du_ue_index_t ue_index);
+
   void handle_reestablishment_request(du_ue_index_t new_ue_index, du_ue_index_t old_ue_index);
+
+  void handle_ue_config_applied(du_ue_index_t ue_index);
 
   /// \brief Handle the configuration of an existing UE context by RIC request.
   async_task<du_mac_sched_control_config_response> handle_ue_config_request(const du_mac_sched_control_config& msg);
@@ -96,6 +101,9 @@ private:
 
   // task event loops indexed by ue_index
   slotted_array<fifo_async_task_scheduler, MAX_NOF_DU_UES> ue_ctrl_loop;
+
+  // Whether new UEs should be created.
+  bool stop_accepting_ues = false;
 };
 
 } // namespace srs_du

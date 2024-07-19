@@ -23,6 +23,7 @@
 #pragma once
 
 #include "srsran/ofh/timing/ofh_ota_symbol_boundary_notifier.h"
+#include "srsran/srslog/srslog.h"
 #include <atomic>
 
 namespace srsran {
@@ -47,7 +48,7 @@ public:
   void on_new_symbol(slot_symbol_point symbol_point) override
   {
     // This atomic is only written from a single thread.
-    count_val.store(symbol_point.system_slot(), std::memory_order::memory_order_release);
+    count_val.store(symbol_point.to_uint(), std::memory_order::memory_order_release);
   }
 
   /// Returns true if the given slot is already late compared to the current OTA time, otherwise false.

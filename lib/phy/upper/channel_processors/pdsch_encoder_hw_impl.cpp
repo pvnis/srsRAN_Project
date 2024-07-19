@@ -36,9 +36,14 @@ void pdsch_encoder_hw_impl::encode(span<uint8_t>        codeword,
                                    const configuration& config)
 {
   // CB mode will be forced if TB mode is requested for a TB larger than the maximum supported size.
+  cb_mode     = encoder->get_cb_mode();
+  max_tb_size = encoder->get_max_tb_size();
   if (!cb_mode && transport_block.size_bytes() > max_tb_size) {
     cb_mode = true;
   }
+
+  // Reserve a hardware-queue for the current encoding operation.
+  encoder->reserve_queue();
 
   // Set the TB encoding parameters (common to all CBs) as required by the hardware-accelerated PDSCH encoder.
   hal::hw_pdsch_encoder_configuration hw_cfg = {};
@@ -132,8 +137,10 @@ void pdsch_encoder_hw_impl::encode(span<uint8_t>        codeword,
         srsran_assert(offset + rm_length <= codeword.size(), "Wrong codeword length.");
 
         codeblock = span<uint8_t>(codeword).subspan(offset, rm_length);
+        codeblock_packed.resize(units::bits(rm_length).round_up_to_bytes().value());
       } else {
         codeblock = codeword;
+        codeblock_packed.resize(units::bits(codeword.size()).round_up_to_bytes().value());
       }
 
       // Make sure at least one operation is dequeued.
@@ -167,6 +174,9 @@ void pdsch_encoder_hw_impl::encode(span<uint8_t>        codeword,
       }
     }
   }
+
+  // Free the hardware-queue utilized by completed encoding operation.
+  encoder->free_queue();
 }
 
 /// \brief Computes the length of the rate-matched codeblock corresponding to each segment,

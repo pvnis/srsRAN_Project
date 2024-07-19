@@ -35,13 +35,18 @@ private:
   pcap_rlc_pdu_context pcap_context;
 
 public:
-  rlc_rx_tm_entity(uint32_t                          du_index,
+  rlc_rx_tm_entity(gnb_du_id_t                       gnb_du_id,
                    du_ue_index_t                     ue_index,
                    rb_id_t                           rb_id,
                    const rlc_rx_tm_config&           config,
                    rlc_rx_upper_layer_data_notifier& upper_dn_,
                    bool                              metrics_enabled,
                    rlc_pcap&                         pcap_);
+
+  void stop() final
+  {
+    // There are no timers to be stopped here.
+  }
 
   // Interfaces for higher layers
   void handle_pdu(byte_buffer_slice buf) override;

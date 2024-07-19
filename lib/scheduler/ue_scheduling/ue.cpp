@@ -23,6 +23,7 @@
 #include "ue.h"
 #include "../support/dmrs_helpers.h"
 #include "../support/prbs_calculator.h"
+#include "srsran/srslog/srslog.h"
 
 using namespace srsran;
 
@@ -120,20 +121,9 @@ void ue::handle_reconfiguration_request(const ue_reconf_command& cmd)
   }
 }
 
-unsigned ue::pending_dl_newtx_bytes() const
+unsigned ue::pending_dl_newtx_bytes(lcid_t lcid) const
 {
-  return dl_lc_ch_mgr.pending_bytes();
-}
-
-unsigned ue::pending_dl_srb0_newtx_bytes() const
-{
-  unsigned pending_bytes = dl_lc_ch_mgr.pending_bytes(LCID_SRB0);
-
-  if (pending_bytes > 0) {
-    // In case SRB0 has data, only allocate SRB0 and CEs.
-    return pending_bytes + dl_lc_ch_mgr.pending_ue_con_res_id_ce_bytes();
-  }
-  return pending_bytes;
+  return lcid != INVALID_LCID ? dl_lc_ch_mgr.pending_bytes(lcid) : dl_lc_ch_mgr.pending_bytes();
 }
 
 unsigned ue::pending_ul_newtx_bytes() const
@@ -168,18 +158,24 @@ bool ue::has_pending_sr() const
   return ul_lc_ch_mgr.has_pending_sr();
 }
 
-unsigned ue::build_dl_transport_block_info(dl_msg_tb_info& tb_info, unsigned tb_size_bytes)
+unsigned ue::build_dl_transport_block_info(dl_msg_tb_info& tb_info, unsigned tb_size_bytes, lcid_t lcid)
 {
   unsigned total_subpdu_bytes = 0;
   total_subpdu_bytes += allocate_mac_ces(tb_info, dl_lc_ch_mgr, tb_size_bytes);
-  total_subpdu_bytes += allocate_mac_sdus(tb_info, dl_lc_ch_mgr, tb_size_bytes - total_subpdu_bytes);
+  total_subpdu_bytes += allocate_mac_sdus(tb_info, dl_lc_ch_mgr, tb_size_bytes - total_subpdu_bytes, lcid);
   return total_subpdu_bytes;
 }
 
-unsigned ue::build_dl_srb0_transport_block_info(dl_msg_tb_info& tb_info, unsigned tb_size_bytes)
+unsigned ue::build_dl_fallback_transport_block_info(dl_msg_tb_info& tb_info, unsigned tb_size_bytes)
 {
   unsigned total_subpdu_bytes = 0;
   total_subpdu_bytes += allocate_ue_con_res_id_mac_ce(tb_info, dl_lc_ch_mgr, tb_size_bytes);
-  total_subpdu_bytes += allocate_mac_sdus(tb_info, dl_lc_ch_mgr, tb_size_bytes - total_subpdu_bytes);
+  // Since SRB0 PDU cannot be segmented, skip SRB0 if remaining TB size is not enough to fit entire PDU.
+  if (dl_lc_ch_mgr.has_pending_bytes(LCID_SRB0) and
+      ((tb_size_bytes - total_subpdu_bytes) >= dl_lc_ch_mgr.pending_bytes(LCID_SRB0))) {
+    total_subpdu_bytes += allocate_mac_sdus(tb_info, dl_lc_ch_mgr, tb_size_bytes - total_subpdu_bytes, LCID_SRB0);
+    return total_subpdu_bytes;
+  }
+  total_subpdu_bytes += allocate_mac_sdus(tb_info, dl_lc_ch_mgr, tb_size_bytes - total_subpdu_bytes, LCID_SRB1);
   return total_subpdu_bytes;
 }

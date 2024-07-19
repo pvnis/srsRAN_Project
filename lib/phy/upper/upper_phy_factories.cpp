@@ -33,6 +33,7 @@
 #include "srsran/phy/upper/channel_estimation.h"
 #include "srsran/phy/upper/channel_processors/channel_processor_factories.h"
 #include "srsran/phy/upper/channel_processors/pusch/factories.h"
+#include "srsran/phy/upper/signal_processors/srs/srs_estimator_factory.h"
 #include "srsran/phy/upper/unique_rx_buffer.h"
 #include "srsran/support/error_handling.h"
 #include <algorithm>
@@ -46,14 +47,17 @@ class uplink_processor_base_factory : public uplink_processor_factory
 public:
   uplink_processor_base_factory(std::shared_ptr<pucch_processor_factory> pucch_factory_,
                                 std::shared_ptr<pusch_processor_factory> pusch_factory_,
-                                std::shared_ptr<prach_detector_factory>  prach_factory_) :
+                                std::shared_ptr<prach_detector_factory>  prach_factory_,
+                                std::shared_ptr<srs_estimator_factory>   srs_factory_) :
     pucch_factory(std::move(pucch_factory_)),
     pusch_factory(std::move(pusch_factory_)),
-    prach_factory(std::move(prach_factory_))
+    prach_factory(std::move(prach_factory_)),
+    srs_factory(std::move(srs_factory_))
   {
     report_fatal_error_if_not(prach_factory, "Invalid PRACH factory.");
     report_fatal_error_if_not(pusch_factory, "Invalid PUSCH factory.");
     report_fatal_error_if_not(pucch_factory, "Invalid PUCCH factory.");
+    report_fatal_error_if_not(srs_factory, "Invalid SRS factory.");
   }
 
   std::unique_ptr<uplink_processor> create(const uplink_processor_config& config) override
@@ -67,7 +71,11 @@ public:
     std::unique_ptr<pucch_processor> pucch_proc = pucch_factory->create();
     report_fatal_error_if_not(pucch_proc, "Invalid PUCCH processor.");
 
-    return std::make_unique<uplink_processor_impl>(std::move(prach), std::move(pusch_proc), std::move(pucch_proc));
+    std::unique_ptr<srs_estimator> srs = srs_factory->create();
+    report_fatal_error_if_not(srs, "Invalid SRS estimator.");
+
+    return std::make_unique<uplink_processor_impl>(
+        std::move(prach), std::move(pusch_proc), std::move(pucch_proc), std::move(srs));
   }
 
   std::unique_ptr<uplink_processor>
@@ -82,19 +90,26 @@ public:
     std::unique_ptr<pucch_processor> pucch_proc = pucch_factory->create(logger);
     report_fatal_error_if_not(pucch_proc, "Invalid PUCCH processor.");
 
-    return std::make_unique<uplink_processor_impl>(std::move(prach), std::move(pusch_proc), std::move(pucch_proc));
+    std::unique_ptr<srs_estimator> srs = srs_factory->create(logger);
+    report_fatal_error_if_not(srs, "Invalid SRS estimator.");
+
+    return std::make_unique<uplink_processor_impl>(
+        std::move(prach), std::move(pusch_proc), std::move(pucch_proc), std::move(srs));
   }
 
   std::unique_ptr<uplink_pdu_validator> create_pdu_validator() override
   {
-    return std::make_unique<uplink_processor_validator_impl>(
-        prach_factory->create_validator(), pucch_factory->create_validator(), pusch_factory->create_validator());
+    return std::make_unique<uplink_processor_validator_impl>(prach_factory->create_validator(),
+                                                             pucch_factory->create_validator(),
+                                                             pusch_factory->create_validator(),
+                                                             srs_factory->create_validator());
   }
 
 private:
   std::shared_ptr<pucch_processor_factory> pucch_factory;
   std::shared_ptr<pusch_processor_factory> pusch_factory;
   std::shared_ptr<prach_detector_factory>  prach_factory;
+  std::shared_ptr<srs_estimator_factory>   srs_factory;
 };
 
 /// \brief Factory to create single executor uplink processors.
@@ -104,11 +119,13 @@ public:
   uplink_processor_task_dispatcher_factory(std::shared_ptr<uplink_processor_factory> factory_,
                                            task_executor&                            pucch_executor_,
                                            task_executor&                            pusch_executor_,
-                                           task_executor&                            prach_executor_) :
+                                           task_executor&                            prach_executor_,
+                                           task_executor&                            srs_executor_) :
     factory(std::move(factory_)),
     pucch_executor(pucch_executor_),
     pusch_executor(pusch_executor_),
-    prach_executor(prach_executor_)
+    prach_executor(prach_executor_),
+    srs_executor(prach_executor_)
   {
     report_fatal_error_if_not(factory, "Invalid uplink factory.");
   }
@@ -122,7 +139,7 @@ public:
 
     // Wrap uplink processor with executor.
     uplink_proc = std::make_unique<uplink_processor_task_dispatcher>(
-        std::move(uplink_proc), pucch_executor, pusch_executor, prach_executor);
+        std::move(uplink_proc), pucch_executor, pusch_executor, prach_executor, srs_executor);
 
     return uplink_proc;
   }
@@ -137,7 +154,7 @@ public:
 
     // Wrap uplink processor with executor.
     uplink_proc = std::make_unique<uplink_processor_task_dispatcher>(
-        std::move(uplink_proc), pucch_executor, pusch_executor, prach_executor);
+        std::move(uplink_proc), pucch_executor, pusch_executor, prach_executor, srs_executor);
 
     return uplink_proc;
   }
@@ -149,6 +166,7 @@ private:
   task_executor&                            pucch_executor;
   task_executor&                            pusch_executor;
   task_executor&                            prach_executor;
+  task_executor&                            srs_executor;
 };
 
 /// \brief Factory to create single executor downlink processors.
@@ -246,7 +264,7 @@ private:
 static std::unique_ptr<downlink_processor_pool>
 create_downlink_processor_pool(std::shared_ptr<downlink_processor_factory> factory, const upper_phy_config& config)
 {
-  srslog::basic_logger& dl_phy_logger = srslog::fetch_basic_logger("DL-PHY", true);
+  srslog::basic_logger& dl_phy_logger = srslog::fetch_basic_logger("PHY", true);
   dl_phy_logger.set_level(config.log_level);
   dl_phy_logger.set_hex_dump_max_size(config.logger_max_hex_size);
 
@@ -276,7 +294,7 @@ create_downlink_processor_pool(std::shared_ptr<downlink_processor_factory> facto
         dl_proc = factory->create(processor_config);
       } else {
         // Fetch and configure logger.
-        srslog::basic_logger& logger = srslog::fetch_basic_logger("DL-PHY" + std::to_string(i_proc), true);
+        srslog::basic_logger& logger = srslog::fetch_basic_logger("PHY", true);
         logger.set_level(config.log_level);
         logger.set_hex_dump_max_size(config.logger_max_hex_size);
 
@@ -328,11 +346,19 @@ create_ul_resource_grid_pool(const upper_phy_config& config, std::shared_ptr<res
 
 static std::shared_ptr<uplink_processor_factory> create_ul_processor_factory(const upper_phy_config& config)
 {
+  std::shared_ptr<low_papr_sequence_generator_factory> sequence_factory =
+      create_low_papr_sequence_generator_sw_factory();
+  report_fatal_error_if_not(sequence_factory, "Invalid sequence factory.");
+
   std::shared_ptr<dft_processor_factory> dft_factory = create_dft_processor_factory_fftw_fast();
   if (!dft_factory) {
     dft_factory = create_dft_processor_factory_generic();
     report_fatal_error_if_not(dft_factory, "Invalid DFT factory.");
   }
+
+  std::shared_ptr<time_alignment_estimator_factory> ta_est_factory =
+      create_time_alignment_estimator_dft_factory(dft_factory);
+  report_fatal_error_if_not(ta_est_factory, "Invalid TA estimator factory.");
 
   std::shared_ptr<prach_generator_factory> prach_gen_factory = create_prach_generator_factory_sw();
   report_fatal_error_if_not(prach_gen_factory, "Invalid PRACH generator factory.");
@@ -341,17 +367,25 @@ static std::shared_ptr<uplink_processor_factory> create_ul_processor_factory(con
       create_prach_detector_factory_sw(dft_factory, prach_gen_factory);
   report_fatal_error_if_not(prach_factory, "Invalid PRACH detector factory.");
 
+  std::shared_ptr<srs_estimator_factory> srs_factory =
+      create_srs_estimator_generic_factory(sequence_factory, ta_est_factory);
+  report_fatal_error_if_not(srs_factory, "Invalid SRS estimator factory.");
+
   // Create PRACH detector pool factory if more than one thread is used.
   if (config.max_ul_thread_concurrency > 1) {
     prach_factory = create_prach_detector_pool_factory(std::move(prach_factory), config.max_ul_thread_concurrency);
     report_fatal_error_if_not(prach_factory, "Invalid PRACH detector pool factory.");
   }
 
+  std::shared_ptr<time_alignment_estimator_factory> ta_estimator_factory =
+      create_time_alignment_estimator_dft_factory(dft_factory);
+  report_fatal_error_if_not(ta_estimator_factory, "Invalid TA estimator factory.");
+
   std::shared_ptr<pseudo_random_generator_factory> prg_factory = create_pseudo_random_generator_sw_factory();
   std::shared_ptr<port_channel_estimator_factory>  ch_estimator_factory =
-      create_port_channel_estimator_factory_sw(dft_factory);
+      create_port_channel_estimator_factory_sw(ta_estimator_factory);
 
-  std::shared_ptr<channel_equalizer_factory>  equalizer_factory    = create_channel_equalizer_factory_zf();
+  std::shared_ptr<channel_equalizer_factory>  equalizer_factory    = create_channel_equalizer_generic_factory();
   std::shared_ptr<channel_modulation_factory> demodulation_factory = create_channel_modulation_sw_factory();
 
   std::shared_ptr<crc_calculator_factory> crc_calc_factory =
@@ -413,8 +447,32 @@ static std::shared_ptr<uplink_processor_factory> create_ul_processor_factory(con
   std::shared_ptr<pusch_processor_factory> pusch_factory = create_pusch_processor_factory_sw(pusch_config);
   report_fatal_error_if_not(pusch_factory, "Invalid PUSCH processor factory.");
 
+  // Create synchronous PUSCH processor for UCI only.
+  pusch_config.decoder_factory =
+      create_pusch_decoder_empty_factory(config.ul_bw_rb, pusch_config.ch_estimate_dimensions.nof_tx_layers);
+  report_fatal_error_if_not(pusch_config.decoder_factory, "Invalid PUSCH decoder factory for UCI.");
+  std::shared_ptr<pusch_processor_factory> uci_proc_factory = create_pusch_processor_factory_sw(pusch_config);
+  report_fatal_error_if_not(uci_proc_factory, "Invalid PUSCH processor factory for UCI.");
+
+  // The PUSCH processor pool shall be blocking if PUSCH decoder operates in synchronous mode;
+  bool pusch_processor_pool_blocking = (config.pusch_decoder_executor == nullptr);
+
+  // If PUSCH decoders operate in asynchronous mode the number of PUSCH regular processors is equal to the maximum
+  // number of enqueued PUSCH transmissions. Otherwise, the number of PUSCH regular processors is equal to number of UL
+  // threads.
+  unsigned nof_regular_processors = config.max_pusch_concurrency;
+  if (pusch_processor_pool_blocking) {
+    nof_regular_processors = config.max_ul_thread_concurrency;
+  }
+
   // Create PUSCH processor pool factory.
-  pusch_factory = create_pusch_processor_pool(std::move(pusch_factory), config.max_pusch_concurrency);
+  pusch_processor_pool_factory_config pusch_proc_pool_config;
+  pusch_proc_pool_config.factory                = pusch_factory;
+  pusch_proc_pool_config.uci_factory            = uci_proc_factory;
+  pusch_proc_pool_config.nof_regular_processors = nof_regular_processors;
+  pusch_proc_pool_config.nof_uci_processors     = config.max_ul_thread_concurrency;
+  pusch_proc_pool_config.blocking               = pusch_processor_pool_blocking;
+  pusch_factory                                 = create_pusch_processor_pool(pusch_proc_pool_config);
   report_fatal_error_if_not(pusch_factory, "Invalid PUSCH processor pool factory.");
 
   std::shared_ptr<low_papr_sequence_generator_factory>  lpg_factory = create_low_papr_sequence_generator_sw_factory();
@@ -423,7 +481,7 @@ static std::shared_ptr<uplink_processor_factory> create_ul_processor_factory(con
 
   // Create channel estimator factory.
   std::shared_ptr<port_channel_estimator_factory> port_chan_estimator_factory =
-      create_port_channel_estimator_factory_sw(dft_factory);
+      create_port_channel_estimator_factory_sw(ta_estimator_factory);
   report_fatal_error_if_not(port_chan_estimator_factory, "Invalid port channel estimator factory.");
 
   std::shared_ptr<dmrs_pucch_estimator_factory> pucch_dmrs_factory =
@@ -459,12 +517,12 @@ static std::shared_ptr<uplink_processor_factory> create_ul_processor_factory(con
 
   // Create base factory.
   std::shared_ptr<uplink_processor_factory> factory = std::make_shared<uplink_processor_base_factory>(
-      std::move(pucch_factory), std::move(pusch_factory), std::move(prach_factory));
+      std::move(pucch_factory), std::move(pusch_factory), std::move(prach_factory), std::move(srs_factory));
   report_fatal_error_if_not(factory, "Invalid Uplink processor factory.");
 
   // Create task dispatcher processor factory.
   factory = std::make_shared<uplink_processor_task_dispatcher_factory>(
-      std::move(factory), *config.pucch_executor, *config.pusch_executor, *config.prach_executor);
+      std::move(factory), *config.pucch_executor, *config.pusch_executor, *config.prach_executor, *config.srs_executor);
   report_fatal_error_if_not(factory, "Invalid Uplink processor factory.");
 
   return factory;
@@ -477,7 +535,7 @@ static std::unique_ptr<uplink_processor_pool> create_ul_processor_pool(uplink_pr
   config_pool.num_sectors = 1;
 
   // Fetch and configure logger.
-  srslog::basic_logger& logger = srslog::fetch_basic_logger("UL-PHY", true);
+  srslog::basic_logger& logger = srslog::fetch_basic_logger("PHY", true);
   logger.set_level(config.log_level);
   logger.set_hex_dump_max_size(config.logger_max_hex_size);
 
@@ -680,12 +738,12 @@ srsran::create_downlink_processor_factory_sw(const downlink_processor_factory_sw
 
   // Create channel processors - PDSCH
   std::shared_ptr<pdsch_processor_factory> pdsch_proc_factory;
-  if (variant_holds_alternative<pdsch_processor_generic_configuration>(config.pdsch_processor)) {
+  if (std::holds_alternative<pdsch_processor_generic_configuration>(config.pdsch_processor)) {
     pdsch_proc_factory =
         create_pdsch_processor_factory_sw(pdsch_enc_factory, pdsch_mod_factory, dmrs_pdsch_proc_factory);
-  } else if (variant_holds_alternative<pdsch_processor_concurrent_configuration>(config.pdsch_processor)) {
+  } else if (std::holds_alternative<pdsch_processor_concurrent_configuration>(config.pdsch_processor)) {
     const pdsch_processor_concurrent_configuration& pdsch_processor_config =
-        variant_get<pdsch_processor_concurrent_configuration>(config.pdsch_processor);
+        std::get<pdsch_processor_concurrent_configuration>(config.pdsch_processor);
     report_fatal_error_if_not(pdsch_processor_config.nof_pdsch_codeblock_threads >= 2,
                               "The number of threads (i.e., {}) must be equal to or greater than 2.");
     report_fatal_error_if_not(pdsch_processor_config.pdsch_codeblock_task_executor != nullptr,
@@ -702,7 +760,11 @@ srsran::create_downlink_processor_factory_sw(const downlink_processor_factory_sw
                                                      *pdsch_processor_config.pdsch_codeblock_task_executor,
                                                      pdsch_processor_config.nof_pdsch_codeblock_threads);
     report_fatal_error_if_not(pdsch_proc_factory, "Invalid PDSCH processor factory.");
-  } else if (variant_holds_alternative<pdsch_processor_lite_configuration>(config.pdsch_processor)) {
+
+    // Wrap PDSCH processor factory with a PDSCH processor asynchronous pool.
+    pdsch_proc_factory = create_pdsch_processor_asynchronous_pool(std::move(pdsch_proc_factory),
+                                                                  pdsch_processor_config.max_nof_simultaneous_pdsch);
+  } else if (std::holds_alternative<pdsch_processor_lite_configuration>(config.pdsch_processor)) {
     pdsch_proc_factory = create_pdsch_lite_processor_factory_sw(
         ldpc_seg_tx_factory, ldpc_enc_factory, ldpc_rm_factory, prg_factory, mod_factory, dmrs_pdsch_proc_factory);
   }
@@ -725,19 +787,16 @@ srsran::create_downlink_processor_factory_sw(const downlink_processor_factory_sw
 
   // Wrap the downlink processor dependencies with pools to allow concurrent execution.
   if (config.nof_concurrent_threads > 1) {
-    // If the PDSCH instance is concurrent, the number of instances is given by the PDSCH processor configuration.
-    unsigned max_nof_simultaneous_pdsch = config.nof_concurrent_threads;
-    if (variant_holds_alternative<pdsch_processor_concurrent_configuration>(config.pdsch_processor)) {
-      max_nof_simultaneous_pdsch =
-          variant_get<pdsch_processor_concurrent_configuration>(config.pdsch_processor).max_nof_simultaneous_pdsch;
-    }
-
     pdcch_proc_factory =
         create_pdcch_processor_pool_factory(std::move(pdcch_proc_factory), config.nof_concurrent_threads);
     report_fatal_error_if_not(pdcch_proc_factory, "Invalid PDCCH processor pool factory.");
 
-    pdsch_proc_factory = create_pdsch_processor_pool(std::move(pdsch_proc_factory), max_nof_simultaneous_pdsch);
-    report_fatal_error_if_not(pdcch_proc_factory, "Invalid PDSCH processor pool factory.");
+    // If the PDSCH instance is concurrent, the operation is asynchronous. In this case, each DL processor has an
+    // asynchronous pool of processors and no more pools are necessary.
+    if (!std::holds_alternative<pdsch_processor_concurrent_configuration>(config.pdsch_processor)) {
+      pdsch_proc_factory = create_pdsch_processor_pool(std::move(pdsch_proc_factory), config.nof_concurrent_threads);
+      report_fatal_error_if_not(pdcch_proc_factory, "Invalid PDSCH processor pool factory.");
+    }
 
     ssb_proc_factory = create_ssb_processor_pool_factory(std::move(ssb_proc_factory), config.nof_concurrent_threads);
     report_fatal_error_if_not(pdcch_proc_factory, "Invalid SSB processor pool factory.");

@@ -58,9 +58,9 @@ pcap_pdu_data::pcap_pdu_data(uint16_t            src,
 
 backend_pcap_writer::backend_pcap_writer(uint32_t           dlt,
                                          const std::string& layer_name_,
-                                         const std::string& filename,
+                                         const std::string& filename_,
                                          task_executor&     backend_exec_) :
-  layer_name(layer_name_), backend_exec(backend_exec_), logger(srslog::fetch_basic_logger("ALL"))
+  layer_name(layer_name_), filename(filename_), backend_exec(backend_exec_), logger(srslog::fetch_basic_logger("ALL"))
 {
   writer.open(dlt, filename);
 }
@@ -82,10 +82,12 @@ void backend_pcap_writer::close()
 
   // The pcap writing is still enabled. Dispatch closing of the pcap writer to backend executor.
   // Note: We block waiting until the pcap finishes closing.
-  force_blocking_execute(
+  sync_execute(
       backend_exec,
       [this]() { writer.close(); },
       []() { std::this_thread::sleep_for(std::chrono::milliseconds(100)); });
+
+  fmt::print("{} PCAP stored in {}\n", layer_name, filename);
 }
 
 void backend_pcap_writer::write_pdu(byte_buffer pdu)
